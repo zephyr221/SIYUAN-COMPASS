@@ -1,5 +1,6 @@
-import { createContext, useContext, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
+import { fetchCurrentUser, jAccountLogoutUrl } from "../api/auth";
 import type { AuthResult, AuthUser } from "../api/auth";
 
 const TOKEN_KEY = "siyuan_auth_token";
@@ -7,6 +8,7 @@ const USER_KEY = "siyuan_auth_user";
 
 type AuthContextValue = {
   user: AuthUser | null;
+  loading: boolean;
   completeLogin: (result: AuthResult) => void;
   logout: () => void;
 };
@@ -28,9 +30,38 @@ export function getAuthToken() {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(readStoredUser);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let closed = false;
+    fetchCurrentUser()
+      .then((currentUser) => {
+        if (closed) return;
+        setUser(currentUser);
+        if (currentUser.authSource === "local") {
+          window.localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
+        } else {
+          window.localStorage.removeItem(TOKEN_KEY);
+          window.localStorage.removeItem(USER_KEY);
+        }
+      })
+      .catch(() => {
+        if (closed) return;
+        window.localStorage.removeItem(TOKEN_KEY);
+        window.localStorage.removeItem(USER_KEY);
+        setUser(null);
+      })
+      .finally(() => {
+        if (!closed) setLoading(false);
+      });
+    return () => {
+      closed = true;
+    };
+  }, []);
 
   const value = useMemo<AuthContextValue>(() => ({
     user,
+    loading,
     completeLogin(result) {
       window.localStorage.setItem(TOKEN_KEY, result.token);
       window.localStorage.setItem(USER_KEY, JSON.stringify(result.user));
@@ -40,8 +71,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       window.localStorage.removeItem(TOKEN_KEY);
       window.localStorage.removeItem(USER_KEY);
       setUser(null);
+      if (user?.authSource === "jaccount") {
+        window.location.assign(jAccountLogoutUrl());
+      }
     }
-  }), [user]);
+  }), [loading, user]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

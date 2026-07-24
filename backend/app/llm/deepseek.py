@@ -4,7 +4,7 @@ from app.core.config import get_settings
 
 
 def is_deepseek_configured() -> bool:
-    return bool(get_settings().deepseek_api_key)
+    return bool(get_settings().effective_deepseek_api_key)
 
 
 async def create_deepseek_chat_completion(
@@ -15,19 +15,19 @@ async def create_deepseek_chat_completion(
     json_mode: bool = False,
 ) -> dict[str, str]:
     settings = get_settings()
-    if not settings.deepseek_api_key:
-        raise RuntimeError("缺少 DEEPSEEK_API_KEY，无法调用 DeepSeek。")
+    if not settings.effective_deepseek_api_key:
+        raise RuntimeError("缺少 AI_API_KEY 或 DEEPSEEK_API_KEY，无法调用校内 DeepSeek。")
 
-    base_url = settings.deepseek_base_url.rstrip("/")
+    base_url = settings.effective_deepseek_base_url.rstrip("/")
     async with httpx.AsyncClient(timeout=settings.llm_timeout_seconds) as client:
         response = await client.post(
             f"{base_url}/chat/completions",
             headers={
-                "Authorization": f"Bearer {settings.deepseek_api_key}",
+                "Authorization": f"Bearer {settings.effective_deepseek_api_key}",
                 "Content-Type": "application/json",
             },
             json={
-                "model": settings.deepseek_model,
+                "model": settings.effective_deepseek_model,
                 "messages": messages,
                 "temperature": temperature,
                 "max_tokens": max_tokens,
@@ -51,6 +51,6 @@ async def create_deepseek_chat_completion(
 
     return {
         "content": content,
-        "modelName": data.get("model") or settings.deepseek_model,
+        "modelName": data.get("model") or settings.effective_deepseek_model,
         "finishReason": choice.get("finish_reason") or "",
     }

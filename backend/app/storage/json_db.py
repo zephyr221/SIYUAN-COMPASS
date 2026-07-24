@@ -30,10 +30,13 @@ CREATE TABLE IF NOT EXISTS users (
     username TEXT UNIQUE,
     display_name TEXT,
     password_hash TEXT,
+    auth_source TEXT NOT NULL DEFAULT 'local',
     role TEXT NOT NULL DEFAULT 'student',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_source TEXT NOT NULL DEFAULT 'local';
 
 CREATE TABLE IF NOT EXISTS assessment_responses (
     id TEXT PRIMARY KEY,
@@ -193,6 +196,7 @@ def _user_from_row(row: dict[str, Any] | None) -> dict[str, Any] | None:
         "username": row["username"],
         "displayName": row["display_name"],
         "passwordHash": row["password_hash"],
+        "authSource": row.get("auth_source") or "local",
         "role": row["role"],
         "createdAt": row["created_at"],
         "updatedAt": row["updated_at"],
@@ -230,13 +234,14 @@ def _upsert_user(connection, user: dict[str, Any]) -> None:
     connection.execute(
         """
         INSERT INTO users (
-            id, username, display_name, password_hash, role, created_at, updated_at
+            id, username, display_name, password_hash, auth_source, role, created_at, updated_at
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (id) DO UPDATE SET
             username = EXCLUDED.username,
             display_name = EXCLUDED.display_name,
             password_hash = EXCLUDED.password_hash,
+            auth_source = EXCLUDED.auth_source,
             role = EXCLUDED.role,
             updated_at = EXCLUDED.updated_at
         """,
@@ -245,6 +250,7 @@ def _upsert_user(connection, user: dict[str, Any]) -> None:
             user.get("username"),
             user.get("displayName"),
             user.get("passwordHash"),
+            user.get("authSource", "local"),
             user.get("role", "student"),
             user["createdAt"],
             user["updatedAt"],
@@ -267,6 +273,7 @@ def create_account(
         "username": username,
         "displayName": display_name,
         "passwordHash": password_hash,
+        "authSource": "local",
         "role": role,
         "createdAt": now,
         "updatedAt": now,
@@ -281,6 +288,8 @@ def ensure_admin_account() -> None:
     from app.services.auth import hash_password, normalize_username
 
     settings = get_settings()
+    if not settings.local_auth_enabled:
+        return
     username = normalize_username(settings.admin_username)
     if find_user_by_username(username):
         return
@@ -290,6 +299,41 @@ def ensure_admin_account() -> None:
         password_hash=hash_password(settings.admin_password),
         role="admin",
     )
+
+
+def upsert_jaccount_user(*, username: str, display_name: str, is_admin: bool) -> dict[str, Any]:
+    from app.services.report_generator import now_iso
+
+    now = now_iso()
+    normalized = username.strip().lower()
+    with _connect() as connection:
+        row = connection.execute(
+            """
+            INSERT INTO users (
+                id, username, display_name, password_hash, auth_source,
+                role, created_at, updated_at
+            )
+            VALUES (%s, %s, %s, '', 'jaccount', %s, %s, %s)
+            ON CONFLICT (username) DO UPDATE SET
+                display_name = EXCLUDED.display_name,
+                auth_source = 'jaccount',
+                role = EXCLUDED.role,
+                updated_at = EXCLUDED.updated_at
+            RETURNING *
+            """,
+            (
+                str(uuid4()),
+                normalized,
+                display_name.strip() or normalized,
+                "admin" if is_admin else "student",
+                now,
+                now,
+            ),
+        ).fetchone()
+    user = _user_from_row(row)
+    if not user:
+        raise RuntimeError("jAccount 用户写入失败")
+    return user
 
 
 def _response_storage_record(response: AssessmentResponse) -> dict[str, Any]:

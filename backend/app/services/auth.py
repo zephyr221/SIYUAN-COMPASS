@@ -8,11 +8,14 @@ import secrets
 import time
 from typing import Any
 
-from fastapi import Depends, Header, HTTPException
+from urllib.parse import urlsplit
+
+from fastapi import Depends, Header, HTTPException, Request
 
 from app.core.config import get_settings
 from app.schemas.auth import AuthUser
-from app.storage.json_db import find_user
+from app.services.portal_sso import decode_portal_identity
+from app.storage.json_db import find_user, upsert_jaccount_user
 
 PASSWORD_ITERATIONS = 210_000
 
@@ -91,14 +94,39 @@ def public_user(user: dict[str, Any]) -> AuthUser:
         username=user["username"],
         displayName=user.get("displayName") or user["username"],
         role=user["role"],
+        authSource=user.get("authSource", "local"),
     )
 
 
-def require_user(authorization: str | None = Header(default=None)) -> dict[str, Any]:
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail={"error": "请先登录"})
-    payload = decode_access_token(authorization.removeprefix("Bearer ").strip())
-    user = find_user(payload["sub"]) if payload else None
+def _validate_cookie_request_origin(request: Request) -> None:
+    if request.method in {"GET", "HEAD", "OPTIONS"}:
+        return
+    origin = request.headers.get("origin")
+    expected = urlsplit(get_settings().public_app_url)
+    expected_origin = f"{expected.scheme}://{expected.netloc}"
+    if not origin or origin.rstrip("/") != expected_origin.rstrip("/"):
+        raise HTTPException(status_code=403, detail={"error": "请求来源校验失败"})
+
+
+def require_user(
+    request: Request,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    settings = get_settings()
+    portal_session = request.cookies.get(settings.portal_session_cookie_name)
+    user = None
+    if authorization and authorization.startswith("Bearer "):
+        payload = decode_access_token(authorization.removeprefix("Bearer ").strip())
+        user = find_user(payload["sub"]) if payload else None
+    elif portal_session:
+        identity = decode_portal_identity(portal_session)
+        if identity:
+            _validate_cookie_request_origin(request)
+            user = upsert_jaccount_user(
+                username=identity["username"],
+                display_name=identity["displayName"],
+                is_admin=identity["isAdmin"],
+            )
     if not user:
         raise HTTPException(status_code=401, detail={"error": "登录已失效，请重新登录"})
     return user

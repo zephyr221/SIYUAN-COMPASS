@@ -26,6 +26,7 @@ class AuthUser(BaseModel):
     username: str
     displayName: str
     role: Literal["student", "admin"]
+    authSource: Literal["local", "jaccount"] = "local"
 
 
 class AuthResult(BaseModel):

@@ -14,6 +14,7 @@ import { ReportPage } from "../pages/ReportPage";
 
 export function App() {
   const { user, logout } = useAuth();
+  const enableLocalAuth = import.meta.env.VITE_ENABLE_LOCAL_AUTH !== "false";
 
   return (
     <>
@@ -38,7 +39,7 @@ export function App() {
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
+        {enableLocalAuth && <Route path="/register" element={<RegisterPage />} />}
         <Route path="/assessment" element={<ProtectedRoute role="student"><AssessmentPage /></ProtectedRoute>} />
         <Route path="/my-reports" element={<ProtectedRoute role="student"><MyReportsPage /></ProtectedRoute>} />
         <Route path="/reports/:reportId" element={<ProtectedRoute><ReportPage /></ProtectedRoute>} />

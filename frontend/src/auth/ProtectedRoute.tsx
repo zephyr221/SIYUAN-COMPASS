@@ -9,9 +9,12 @@ export function ProtectedRoute({
   children: ReactNode;
   role?: "student" | "admin";
 }) {
-  const { user } = useAuth();
+  const { loading, user } = useAuth();
   const location = useLocation();
 
+  if (loading) {
+    return <main className="shell page"><div className="panel">正在确认登录状态...</div></main>;
+  }
   if (!user) {
     return <Navigate replace state={{ from: location.pathname }} to="/login" />;
   }

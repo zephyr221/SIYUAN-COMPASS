@@ -1,10 +1,15 @@
 import { getAuthToken } from "../auth/AuthContext";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
+
+export function apiUrl(path: string) {
+  return `${API_BASE_URL}${path}`;
+}
 
 export async function apiRequest<T>(path: string, options?: RequestInit): Promise<T> {
   const token = getAuthToken();
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetch(apiUrl(path), {
+    credentials: "include",
     ...options,
     headers: {
       "Content-Type": "application/json",

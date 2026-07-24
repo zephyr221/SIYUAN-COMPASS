@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { login } from "../api/auth";
+import { jAccountLoginUrl, login } from "../api/auth";
 import { useAuth } from "../auth/AuthContext";
 
 export function LoginPage() {
@@ -12,6 +12,8 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const enableLocalAuth = import.meta.env.VITE_ENABLE_LOCAL_AUTH !== "false";
+  const requested = (location.state as { from?: string } | null)?.from;
 
   async function submit(event?: FormEvent) {
     event?.preventDefault();
@@ -24,7 +26,6 @@ export function LoginPage() {
     try {
       const result = await login(username, password);
       completeLogin(result);
-      const requested = (location.state as { from?: string } | null)?.from;
       navigate(requested || (result.user.role === "admin" ? "/admin" : "/assessment"), { replace: true });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "登录失败");
@@ -39,21 +40,27 @@ export function LoginPage() {
         <div className="auth-heading">
           <span className="auth-product-name">大学生生涯规划智能小助手</span>
           <h1>欢迎回来</h1>
-          <p className="hint">登录账号，继续填写问卷或查看你的生涯蓝图。</p>
+          <p className="hint">使用学校统一身份认证，继续填写问卷或查看你的生涯蓝图。</p>
         </div>
-        <div className="field">
-          <label>用户名</label>
-          <input className="input" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} />
-        </div>
-        <div className="field">
-          <label>密码</label>
-          <input className="input" autoComplete="current-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} />
-        </div>
-        {error && <div className="error">{error}</div>}
-        <button className="button auth-submit" disabled={submitting} type="submit">
-          {submitting ? "登录中..." : "登录"}
-        </button>
-        <p className="auth-switch">还没有账号？<Link to="/register">注册学生账号</Link></p>
+        <a className="button auth-submit" href={jAccountLoginUrl(requested || "/assessment")}>使用 jAccount 登录</a>
+        {enableLocalAuth && (
+          <>
+            <div className="auth-divider"><span>本地开发账号</span></div>
+            <div className="field">
+              <label>用户名</label>
+              <input className="input" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} />
+            </div>
+            <div className="field">
+              <label>密码</label>
+              <input className="input" autoComplete="current-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} />
+            </div>
+            {error && <div className="error">{error}</div>}
+            <button className="button secondary auth-submit" disabled={submitting} type="submit">
+              {submitting ? "登录中..." : "本地账号登录"}
+            </button>
+            <p className="auth-switch">仅限本地开发：<Link to="/register">注册测试账号</Link></p>
+          </>
+        )}
       </form>
     </main>
   );

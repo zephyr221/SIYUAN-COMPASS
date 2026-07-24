@@ -18,4 +18,9 @@ __pycache__/
 backend/.venv/
 
 data/*.json
+data/local-postgres/
 !data/.gitkeep
+
+# This project uses package-lock.json; keep local pnpm bootstrap files out.
+frontend/pnpm-lock.yaml
+frontend/pnpm-workspace.yaml

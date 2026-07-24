@@ -23,10 +23,10 @@ def get_llm_status() -> dict[str, Any]:
     if provider == "deepseek":
         return {
             "provider": provider,
-            "configured": bool(settings.deepseek_api_key),
-            "model": settings.deepseek_model,
-            "baseUrl": settings.deepseek_base_url,
-            "apiKeyVariable": "DEEPSEEK_API_KEY",
+            "configured": bool(settings.effective_deepseek_api_key),
+            "model": settings.effective_deepseek_model,
+            "baseUrl": settings.effective_deepseek_base_url,
+            "apiKeyVariable": "AI_API_KEY 或 DEEPSEEK_API_KEY",
         }
     return {
         "provider": provider,

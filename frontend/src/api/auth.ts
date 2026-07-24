@@ -1,10 +1,11 @@
-import { apiRequest } from "./client";
+import { apiRequest, apiUrl } from "./client";
 
 export type AuthUser = {
   id: string;
   username: string;
   displayName: string;
   role: "student" | "admin";
+  authSource: "local" | "jaccount";
 };
 
 export type AuthResult = {
@@ -35,4 +36,12 @@ export function changePassword(currentPassword: string, newPassword: string) {
     method: "POST",
     body: JSON.stringify({ currentPassword, newPassword })
   });
+}
+
+export function jAccountLoginUrl(nextPath = "/assessment") {
+  return `${apiUrl("/auth/jaccount/login")}?next=${encodeURIComponent(nextPath)}`;
+}
+
+export function jAccountLogoutUrl() {
+  return apiUrl("/auth/logout");
 }

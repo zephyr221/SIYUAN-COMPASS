@@ -7,7 +7,7 @@ from app.llm import provider
 
 
 def settings(selected_provider: str = "kimi") -> SimpleNamespace:
-    return SimpleNamespace(
+    values = SimpleNamespace(
         llm_provider=selected_provider,
         kimi_api_key="kimi-key",
         kimi_base_url="https://api.moonshot.cn/v1",
@@ -15,7 +15,11 @@ def settings(selected_provider: str = "kimi") -> SimpleNamespace:
         deepseek_api_key="deepseek-key",
         deepseek_base_url="https://api.deepseek.com",
         deepseek_model="deepseek-chat",
+        effective_deepseek_api_key="deepseek-key",
+        effective_deepseek_base_url="https://models.sjtu.edu.cn/api/v1",
+        effective_deepseek_model="deepseek-chat",
     )
+    return values
 
 
 class LlmProviderTest(unittest.TestCase):
@@ -27,8 +31,8 @@ class LlmProviderTest(unittest.TestCase):
                     "provider": "deepseek",
                     "configured": True,
                     "model": "deepseek-chat",
-                    "baseUrl": "https://api.deepseek.com",
-                    "apiKeyVariable": "DEEPSEEK_API_KEY",
+                    "baseUrl": "https://models.sjtu.edu.cn/api/v1",
+                    "apiKeyVariable": "AI_API_KEY 或 DEEPSEEK_API_KEY",
                 },
             )
 

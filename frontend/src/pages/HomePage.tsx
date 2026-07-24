@@ -55,7 +55,7 @@ export function HomePage() {
           <Link className="button" to="/assessment">开始填写</Link>
         </div>
       </section>
-      {user ? (
+      {user?.authSource === "local" ? (
         <aside className="panel password-panel">
           <h2>修改密码</h2>
           <p className="hint">当前账号：{user.username}</p>
@@ -79,7 +79,7 @@ export function HomePage() {
             </button>
           </form>
         </aside>
-      ) : (
+      ) : !user ? (
         <aside className="panel">
           <h2>第一阶段闭环</h2>
           <p className="hint">首次填写、画像提取、状态判断、报告生成和反馈评分已经串成一条最小可用流程。</p>
@@ -90,7 +90,7 @@ export function HomePage() {
             <div className="stat"><strong>4</strong><span>反馈评分</span></div>
           </div>
         </aside>
-      )}
+      ) : null}
     </main>
   );
 }

@@ -1,0 +1,24 @@
+[Unit]
+Description=Siyuan Compass career assistant API
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=siyuan-compass
+Group=siyuan-compass
+WorkingDirectory=/opt/siyuan-compass/backend
+EnvironmentFile=/etc/course-ai.env
+EnvironmentFile=/etc/siyuan-compass.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/siyuan-compass/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 18120 --proxy-headers --forwarded-allow-ips=127.0.0.1
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/siyuan-compass
+
+[Install]
+WantedBy=multi-user.target
