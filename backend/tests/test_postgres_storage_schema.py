@@ -56,6 +56,10 @@ class PostgresStorageSchemaTest(unittest.TestCase):
         self.assertIn("LEFT JOIN users ON users.id = reports.user_id", STORAGE_SOURCE)
         self.assertIn('record["accountDisplayName"]', STORAGE_SOURCE)
 
+    def test_jaccount_admin_role_is_managed_locally(self):
+        self.assertIn("def set_jaccount_user_role", STORAGE_SOURCE)
+        self.assertIn("role = users.role", STORAGE_SOURCE)
+
 
 if __name__ == "__main__":
     unittest.main()

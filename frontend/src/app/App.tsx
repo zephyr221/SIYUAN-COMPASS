@@ -22,8 +22,8 @@ export function App() {
         <div className="shell topbar-inner">
           <Link className="brand" to="/">大学生生涯规划智能小助手</Link>
           <nav className="nav">
-            {user?.role === "student" && <NavLink to="/assessment">开始填写</NavLink>}
-            {user?.role === "student" && <NavLink to="/my-reports">我的报告</NavLink>}
+            {user && <NavLink to="/assessment">开始填写</NavLink>}
+            {user && <NavLink to="/my-reports">我的报告</NavLink>}
             {user?.role === "admin" && <NavLink to="/admin">管理员后台</NavLink>}
             {user ? (
               <>

@@ -317,7 +317,7 @@ def upsert_jaccount_user(*, username: str, display_name: str) -> dict[str, Any]:
             ON CONFLICT (username) DO UPDATE SET
                 display_name = EXCLUDED.display_name,
                 auth_source = 'jaccount',
-                role = EXCLUDED.role,
+                role = users.role,
                 updated_at = EXCLUDED.updated_at
             RETURNING *
             """,
@@ -333,6 +333,37 @@ def upsert_jaccount_user(*, username: str, display_name: str) -> dict[str, Any]:
     user = _user_from_row(row)
     if not user:
         raise RuntimeError("jAccount 用户写入失败")
+    return user
+
+
+def set_jaccount_user_role(*, username: str, role: Literal["student", "admin"]) -> dict[str, Any]:
+    from app.services.report_generator import now_iso
+
+    now = now_iso()
+    normalized = username.strip().lower()
+    if not normalized:
+        raise ValueError("jAccount username cannot be empty")
+
+    with _connect() as connection:
+        row = connection.execute(
+            """
+            INSERT INTO users (
+                id, username, display_name, password_hash, auth_source,
+                role, created_at, updated_at
+            )
+            VALUES (%s, %s, %s, '', 'jaccount', %s, %s, %s)
+            ON CONFLICT (username) DO UPDATE SET
+                role = EXCLUDED.role,
+                updated_at = EXCLUDED.updated_at
+            WHERE users.auth_source = 'jaccount'
+            RETURNING *
+            """,
+            (str(uuid4()), normalized, normalized, role, now, now),
+        ).fetchone()
+
+    user = _user_from_row(row)
+    if not user:
+        raise RuntimeError("Cannot change a local account through jAccount role management")
     return user
 
 
