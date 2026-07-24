@@ -2,6 +2,8 @@
 
 学生原始项目：[labixiaoji/SIYUAN-COMPASS](https://github.com/labixiaoji/SIYUAN-COMPASS)。本目录在原项目基础上增加了上海交通大学校内 DeepSeek、jAccount 单点登录和 `/shengya/` 子路径部署支持。
 
+正式环境的部署结构、认证来源、更新和回退步骤见 [`docs/部署记录-2026-07-24.md`](docs/部署记录-2026-07-24.md)。
+
 大学生生涯规划智能小助手采用前后端分离结构：
 
 ```text
