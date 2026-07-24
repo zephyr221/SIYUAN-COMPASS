@@ -301,7 +301,7 @@ def ensure_admin_account() -> None:
     )
 
 
-def upsert_jaccount_user(*, username: str, display_name: str, is_admin: bool) -> dict[str, Any]:
+def upsert_jaccount_user(*, username: str, display_name: str) -> dict[str, Any]:
     from app.services.report_generator import now_iso
 
     now = now_iso()
@@ -325,7 +325,7 @@ def upsert_jaccount_user(*, username: str, display_name: str, is_admin: bool) ->
                 str(uuid4()),
                 normalized,
                 display_name.strip() or normalized,
-                "admin" if is_admin else "student",
+                "student",
                 now,
                 now,
             ),

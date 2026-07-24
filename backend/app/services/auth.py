@@ -125,7 +125,6 @@ def require_user(
             user = upsert_jaccount_user(
                 username=identity["username"],
                 display_name=identity["displayName"],
-                is_admin=identity["isAdmin"],
             )
     if not user:
         raise HTTPException(status_code=401, detail={"error": "登录已失效，请重新登录"})

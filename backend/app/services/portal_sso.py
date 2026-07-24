@@ -46,5 +46,4 @@ def decode_portal_identity(cookie_value: str | None) -> dict[str, Any] | None:
     return {
         "username": username,
         "displayName": display_name or username,
-        "isAdmin": user.get("is_admin") is True,
     }

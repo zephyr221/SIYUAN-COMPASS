@@ -18,17 +18,16 @@ def _signed_portal_cookie(payload: dict) -> str:
     return serializer.dumps(payload)
 
 
-def test_decode_portal_identity(monkeypatch) -> None:
+def test_decode_portal_identity_ignores_portal_admin_flag(monkeypatch) -> None:
     settings = get_settings()
     monkeypatch.setattr(settings, "portal_session_secret", TEST_SECRET)
     cookie = _signed_portal_cookie(
-        {"user": {"jaccount": "Student01", "name": "测试学生", "is_admin": False}}
+        {"user": {"jaccount": "Student01", "name": "测试学生", "is_admin": True}}
     )
 
     assert decode_portal_identity(cookie) == {
         "username": "student01",
         "displayName": "测试学生",
-        "isAdmin": False,
     }
 
 
