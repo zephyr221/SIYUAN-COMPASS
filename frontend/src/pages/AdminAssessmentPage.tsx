@@ -68,14 +68,14 @@ const sections: SectionSpec[] = [
     title: "未来愿景",
     fields: [
       { label: "5年后城市", value: (item) => item.fiveYearCity },
-      { label: "5年后收入状态", value: (item) => item.fiveYearIncome },
+      { label: "5年后预期收入", value: (item) => item.fiveYearIncome },
       { label: "5年后行业", value: (item) => item.fiveYearIndustry },
       { label: "5年后岗位", value: (item) => item.fiveYearRole },
       { label: "5年后家庭状态", value: (item) => item.fiveYearFamilyStatus },
       { label: "5年后居住计划", value: (item) => item.fiveYearHousingPlan },
       { label: "5年后爱好 / 技能", value: (item) => item.fiveYearHobbiesSkills },
       { label: "10年后城市", value: (item) => item.tenYearCity },
-      { label: "10年后收入状态", value: (item) => item.tenYearIncome },
+      { label: "10年后预期收入", value: (item) => item.tenYearIncome },
       { label: "10年后行业", value: (item) => item.tenYearIndustry },
       { label: "10年后岗位", value: (item) => item.tenYearRole },
       { label: "10年后家庭状态", value: (item) => item.tenYearFamilyStatus },
@@ -176,7 +176,7 @@ export function AdminAssessmentPage() {
     <main className="shell page">
       <div className="page-title">
         <h1>学生问卷内容</h1>
-        <p>{assessment.studentName || "未知学生"} · {assessment.educationStage || "-"} {assessment.grade || "-"}</p>
+        <p>问卷记录 · {assessment.educationStage || "-"} {assessment.grade || "-"}</p>
       </div>
 
       <section className="assessment-reader">

@@ -4,24 +4,53 @@ import json
 
 from app.schemas.assessment import AssessmentResponse
 from app.schemas.profile import ProfileAnalysisResult
+from app.core.data_privacy import redact_obvious_contact_details
 from app.services.question_rules import render_question_rules
 
-PROFILE_PROMPT_VERSION = "profile-analysis-v1.6.0"
+PROFILE_PROMPT_VERSION = "profile-analysis-v1.7.0"
+
+# These values are either direct identifiers, internal linkage metadata, or
+# questionnaire fields that are not needed to produce career guidance.  Keep
+# the exclusion in one place so both LLM stages use the same data boundary.
+DIRECT_IDENTIFIER_FIELDS = frozenset(
+    {
+        "studentName",
+        "school",
+        "studentNumber",
+        "contactInfo",
+    }
+)
+INTERNAL_METADATA_FIELDS = frozenset(
+    {
+        "id",
+        "userId",
+        "submittedAt",
+        "createdAt",
+    }
+)
+MODEL_UNUSED_RESPONSE_FIELDS = frozenset(
+    {
+        "fiveYearIncome",
+        "tenYearIncome",
+        "educationCertainty",
+        "englishCertificates",
+        "academicExperiences",
+        "executionCase",
+        "negativeFeedbackReaction",
+    }
+)
+MODEL_EXCLUDED_RESPONSE_FIELDS = (
+    DIRECT_IDENTIFIER_FIELDS | INTERNAL_METADATA_FIELDS | MODEL_UNUSED_RESPONSE_FIELDS
+)
 
 
-def build_profile_messages(response: AssessmentResponse, retry_reason: str | None = None) -> list[dict[str, str]]:
-    response_payload = response.model_dump(mode="json")
-    response_payload.pop("studentName", None)
-    response_payload.pop("school", None)
-    response_payload.pop("studentNumber", None)
-    response_payload.pop("contactInfo", None)
-    response_payload.pop("fiveYearIncome", None)
-    response_payload.pop("tenYearIncome", None)
-    response_payload.pop("educationCertainty", None)
-    response_payload.pop("englishCertificates", None)
-    response_payload.pop("academicExperiences", None)
-    response_payload.pop("executionCase", None)
-    response_payload.pop("negativeFeedbackReaction", None)
+def build_model_safe_response_payload(response: AssessmentResponse) -> dict[str, object]:
+    """Return only questionnaire fields approved for external model input."""
+
+    response_payload = response.model_dump(
+        mode="json",
+        exclude=MODEL_EXCLUDED_RESPONSE_FIELDS,
+    )
     if response.doctoralCareerDirection != "其他发展方向":
         response_payload.pop("doctoralCareerOther", None)
     if "其他" not in response.educationPathReasons:
@@ -32,6 +61,38 @@ def build_profile_messages(response: AssessmentResponse, retry_reason: str | Non
         response_payload.pop("jobInfoChannelOther", None)
     if "其他" not in response.careerConfusions:
         response_payload.pop("careerConfusionOther", None)
+    return response_payload
+
+
+def redact_model_forbidden_values(text: str, response: AssessmentResponse) -> str:
+    """Redact known identifiers if a user repeats them in another answer."""
+
+    redacted = text
+    forbidden_values: set[str] = set()
+    for field_name in DIRECT_IDENTIFIER_FIELDS | INTERNAL_METADATA_FIELDS:
+        value = getattr(response, field_name, None)
+        if isinstance(value, str) and value.strip():
+            normalized = value.strip()
+            forbidden_values.add(normalized)
+            # Structured profile values are JSON encoded before this final
+            # safeguard, so also cover escaped newlines, quotes and slashes.
+            forbidden_values.add(json.dumps(normalized, ensure_ascii=False)[1:-1])
+    for forbidden_value in sorted(forbidden_values, key=len, reverse=True):
+        redacted = redacted.replace(forbidden_value, "[已脱敏]")
+    return redact_obvious_contact_details(redacted)
+
+
+def _render_model_safe_question_rules(selected_confusions: list[str]) -> str:
+    rules_payload = json.loads(render_question_rules(selected_confusions))
+    question_rules = rules_payload.get("questionRules")
+    if isinstance(question_rules, dict):
+        for field_name in MODEL_EXCLUDED_RESPONSE_FIELDS:
+            question_rules.pop(field_name, None)
+    return json.dumps(rules_payload, ensure_ascii=False, separators=(",", ":"))
+
+
+def build_profile_messages(response: AssessmentResponse, retry_reason: str | None = None) -> list[dict[str, str]]:
+    response_payload = build_model_safe_response_payload(response)
     response_json = json.dumps(
         response_payload,
         ensure_ascii=False,
@@ -51,19 +112,7 @@ def build_profile_messages(response: AssessmentResponse, retry_reason: str | Non
             "仅当finish_reason为length或错误说明JSON无法解析时才压缩文字；字段校验失败时不要无谓删减必填字段。"
         )
 
-    return [
-        {
-            "role": "system",
-            "content": (
-                "你是一名负责高校生涯规划评估的结构化分析专家。"
-                "你的任务不是撰写报告，而是依据问卷设计规则完成证据推理，并只输出合法JSON。"
-                "每个结论必须引用具体回答；必须区分事实、行为、规划、信息、意愿、自评和愿景。"
-                "不得把自评直接写成已验证能力，不得把意愿直接写成适配结论，不得进行医学、心理或人格诊断。"
-            ),
-        },
-        {
-            "role": "user",
-            "content": f"""
+    user_content = f"""
 请根据“问题解释规则”和“学生回答”生成结构化用户画像JSON。问题解释规则来自问卷设计文档，是判断每道题用途的最高优先级依据。{retry_instruction}
 
 分析流程必须按以下顺序执行：
@@ -85,7 +134,7 @@ def build_profile_messages(response: AssessmentResponse, retry_reason: str | Non
 - reportEvidenceMap建议使用JSON Schema中的六个中文模块标题；标题有轻微差异不会导致画像失败。
 - verifiedStrengths至少需要一条behavior证据；没有满足条件的优势时允许为空。
 - potentialStrengths用于表达尚待行为验证的能力或兴趣。
-- 学号、联系方式和姓名只用于系统归属，不得出现在画像JSON、证据或报告证据映射中。
+- 直接身份信息只用于系统归属，不得出现在画像JSON、证据或报告证据映射中。
 - 结论信心只能为low、medium或high；路径适配只能为low、medium、high或uncertain。
 - Plan A不一定是升学，应由目标匹配、真实行动和时间窗口共同决定。
 - Plan C不能重复Plan A或Plan B，尤其要服务于“自己也不知道想干什么”或原有设定证据不足的学生；如果证据不足，Plan C应明确写成低成本验证方向，而不是确定结论。
@@ -96,13 +145,28 @@ def build_profile_messages(response: AssessmentResponse, retry_reason: str | Non
 - 只输出JSON对象，不要Markdown代码块、解释文字或前后缀。
 
 问题解释规则：
-{render_question_rules(response.careerConfusions)}
+{_render_model_safe_question_rules(response.careerConfusions)}
 
 学生回答：
 {response_json}
 
 输出必须符合以下JSON Schema：
 {schema_json}
-""".strip(),
+""".strip()
+    user_content = redact_model_forbidden_values(user_content, response)
+
+    return [
+        {
+            "role": "system",
+            "content": (
+                "你是一名负责高校生涯规划评估的结构化分析专家。"
+                "你的任务不是撰写报告，而是依据问卷设计规则完成证据推理，并只输出合法JSON。"
+                "每个结论必须引用具体回答；必须区分事实、行为、规划、信息、意愿、自评和愿景。"
+                "不得把自评直接写成已验证能力，不得把意愿直接写成适配结论，不得进行医学、心理或人格诊断。"
+            ),
+        },
+        {
+            "role": "user",
+            "content": user_content,
         },
     ]

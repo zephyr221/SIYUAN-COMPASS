@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { fetchAdminMetrics, fetchAdminRecords } from "../api/admin";
+import { fetchAdminAuditLogs, fetchAdminMetrics, fetchAdminRecords } from "../api/admin";
+import type { AdminAuditLog } from "../api/admin";
 import type { AdminMetrics, AdminRecord, ReportFeedbackRecord } from "../types/report";
 
 const recordsPerPage = 8;
@@ -51,9 +52,21 @@ function reportWarnings(record: AdminRecord) {
     .map(compactWarningText);
 }
 
+const auditActionLabels: Record<string, string> = {
+  "admin.metrics.read": "查看统计指标",
+  "admin.records.read": "查看学生记录",
+  "admin.audit.read": "查看审计日志",
+  "assessment.read": "查看完整问卷",
+  "report.read": "查看报告",
+  "report.update": "修改报告",
+  "report.delete": "删除报告"
+};
+
 export function AdminPage() {
   const [metrics, setMetrics] = useState<AdminMetrics | null>(null);
   const [records, setRecords] = useState<AdminRecord[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AdminAuditLog[]>([]);
+  const [auditTotal, setAuditTotal] = useState(0);
   const [error, setError] = useState("");
   const [keyword, setKeyword] = useState("");
   const [qualityStatus, setQualityStatus] = useState("all");
@@ -62,10 +75,12 @@ export function AdminPage() {
   const [page, setPage] = useState(1);
 
   useEffect(() => {
-    Promise.all([fetchAdminMetrics(), fetchAdminRecords()])
-      .then(([nextMetrics, nextRecords]) => {
+    Promise.all([fetchAdminMetrics(), fetchAdminRecords(), fetchAdminAuditLogs()])
+      .then(([nextMetrics, nextRecords, nextAuditLogs]) => {
         setMetrics(nextMetrics);
         setRecords(nextRecords.records);
+        setAuditLogs(nextAuditLogs.items);
+        setAuditTotal(nextAuditLogs.total);
       })
       .catch((caught) => setError(caught instanceof Error ? caught.message : "后台数据加载失败。"));
   }, []);
@@ -85,8 +100,6 @@ export function AdminPage() {
     const searchableText = [
       record.student.displayName,
       record.student.username,
-      record.student.studentNumber,
-      record.student.contactInfo,
       record.assessment.collegeMajor,
     ].filter(Boolean).join(" ").toLowerCase();
     return (
@@ -171,7 +184,7 @@ export function AdminPage() {
             <input
               value={keyword}
               onChange={(event) => resetPage(setKeyword, event.target.value)}
-              placeholder="姓名、用户名、学号、专业"
+              placeholder="姓名、用户名、专业"
             />
           </label>
           <label>
@@ -235,8 +248,6 @@ export function AdminPage() {
                       <span className="admin-block-label">学生</span>
                       <strong>{record.student.displayName}</strong>
                       <p>{record.student.username}</p>
-                      {record.student.studentNumber && <p>{record.student.studentNumber}</p>}
-                      {record.student.contactInfo && <p>{record.student.contactInfo}</p>}
                     </div>
                     <div className="admin-record-block">
                       <span className="admin-block-label">问卷内容</span>
@@ -303,6 +314,34 @@ export function AdminPage() {
               </nav>
             )}
           </>
+        )}
+      </section>
+
+      <section className="panel admin-audit-panel">
+        <div className="admin-section-head">
+          <div>
+            <h2>管理员审计</h2>
+            <p className="hint">记录敏感信息查看、报告修改和删除操作，日志默认保留 180 天。</p>
+          </div>
+          <span>共 {auditTotal} 条</span>
+        </div>
+        {auditLogs.length === 0 ? (
+          <p className="hint">暂无管理员操作记录。</p>
+        ) : (
+          <div className="admin-audit-list">
+            {auditLogs.map((item) => (
+              <div className="admin-audit-item" key={item.id}>
+                <div>
+                  <strong>{auditActionLabels[item.action] || item.action}</strong>
+                  <span>{item.adminDisplayName}</span>
+                </div>
+                <div>
+                  <span>{item.targetType} · {item.targetId === "all" ? "全部记录" : item.targetId.slice(0, 12)}</span>
+                  <time dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleString("zh-CN")}</time>
+                </div>
+              </div>
+            ))}
+          </div>
         )}
       </section>
     </main>

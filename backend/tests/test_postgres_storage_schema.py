@@ -13,6 +13,7 @@ class PostgresStorageSchemaTest(unittest.TestCase):
             "assessment_responses",
             "assessment_scores",
             "assessment_choices",
+            "assessment_drafts",
             "career_profiles",
             "reports",
             "report_versions",
@@ -40,6 +41,13 @@ class PostgresStorageSchemaTest(unittest.TestCase):
         self.assertIn("save_generation_job_if_user_idle", STORAGE_SOURCE)
         self.assertIn("FOR UPDATE", STORAGE_SOURCE)
 
+    def test_daily_quota_counter_survives_business_data_deletion(self):
+        self.assertIn("generation_quota_day", STORAGE_SOURCE)
+        self.assertIn("generation_quota_used", STORAGE_SOURCE)
+        self.assertIn("speech_quota_day", STORAGE_SOURCE)
+        self.assertIn("speech_quota_used", STORAGE_SOURCE)
+        self.assertIn("UPDATE users", STORAGE_SOURCE)
+
     def test_admin_records_include_report_feedbacks(self):
         self.assertIn("feedbacks_by_report", STORAGE_SOURCE)
         self.assertIn('"feedbacks"', STORAGE_SOURCE)
@@ -59,6 +67,11 @@ class PostgresStorageSchemaTest(unittest.TestCase):
     def test_jaccount_admin_role_is_managed_locally(self):
         self.assertIn("def set_jaccount_user_role", STORAGE_SOURCE)
         self.assertIn("role = users.role", STORAGE_SOURCE)
+    def test_assessment_drafts_are_account_scoped_and_expiring(self):
+        self.assertIn("user_id TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE", STORAGE_SOURCE)
+        self.assertIn("expires_at TIMESTAMPTZ NOT NULL", STORAGE_SOURCE)
+        self.assertIn("AssessmentDraftConflictError", STORAGE_SOURCE)
+        self.assertIn("WHERE user_id = %s", STORAGE_SOURCE)
 
 
 if __name__ == "__main__":

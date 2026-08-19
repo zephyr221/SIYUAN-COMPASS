@@ -24,6 +24,16 @@ class AssessmentQuestionnaireUpdateTest(unittest.TestCase):
         self.assertNotIn('"studentNumber": "请填写学号"', VALIDATOR_SOURCE)
         self.assertIn('"hometown": "请填写家乡或主要成长地"', VALIDATOR_SOURCE)
 
+    def test_collected_field_requiredness_matches_frontend_copy(self):
+        for label in ["姓名（选填）", "学号（选填）", "联系方式（选填）"]:
+            self.assertIn(label, FRONTEND_SOURCE)
+        for field in ["gender", "fiveYearIncome", "tenYearIncome"]:
+            self.assertIn(f'"{field}":', VALIDATOR_SOURCE)
+        self.assertIn("你的性别是？", FRONTEND_SOURCE)
+        self.assertIn("5年后预期收入", FRONTEND_SOURCE)
+        self.assertIn("10年后预期收入", FRONTEND_SOURCE)
+        self.assertNotIn("敏感生涯支持信息", FRONTEND_SOURCE)
+
     def test_multi_select_limits_and_other_fields_are_validated(self):
         self.assertIn("len(input_data.educationPathReasons) > 3", VALIDATOR_SOURCE)
         self.assertIn("len(input_data.preferredWorkStyle) > 2", VALIDATOR_SOURCE)

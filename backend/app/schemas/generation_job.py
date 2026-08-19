@@ -22,5 +22,6 @@ class GenerationJobStatus(BaseModel):
     reportId: Optional[str] = None
     generationStatus: Optional[str] = None
     error: Optional[str] = None
+    attempts: int = Field(default=0, ge=0)
     createdAt: Optional[str] = None
     updatedAt: Optional[str] = None

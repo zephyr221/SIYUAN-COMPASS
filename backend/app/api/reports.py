@@ -1,18 +1,12 @@
-from datetime import datetime, timezone
-
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.services.profile_analyzer import ProfileAnalysisError, analyze_career_profile
-from app.services.report_generator import ReportGenerationError, generate_report
 from app.services.auth import require_user
 from app.storage.json_db import (
-    find_profile,
+    delete_report_bundle,
     find_report,
-    find_response,
     get_user_generation_jobs,
     get_user_reports,
-    update_profile,
-    update_report,
+    record_admin_audit,
 )
 
 router = APIRouter(tags=["reports"])
@@ -24,6 +18,8 @@ def _get_report_or_404(report_id: str, user):
         raise HTTPException(status_code=404, detail={"error": "报告不存在"})
     if user["role"] != "admin" and report.userId != user["id"]:
         raise HTTPException(status_code=403, detail={"error": "无权查看该报告"})
+    if user["role"] == "admin":
+        record_admin_audit(user["id"], "report.read", "report", report_id)
     return report
 
 
@@ -48,50 +44,40 @@ def get_report(report_id: str, user=Depends(require_user)):
     return _get_report_or_404(report_id, user)
 
 
-async def _regenerate_report(report_id: str, user):
-    existing = _get_report_or_404(report_id, user)
+@router.delete("/reports/{report_id}")
+def delete_report(report_id: str, user=Depends(require_user)) -> dict[str, object]:
+    report = _get_report_or_404(report_id, user)
+    deleted = delete_report_bundle(
+        report.id,
+        report.userId,
+        admin_id=user["id"] if user["role"] == "admin" else None,
+    )
+    if not deleted:
+        raise HTTPException(status_code=404, detail={"error": "报告不存在或已被删除"})
+    return {
+        "message": "报告、历史版本和反馈已删除；不再被其他报告使用的关联问卷与画像也已清除。",
+        "reportId": report.id,
+    }
 
-    response = find_response(existing.responseId)
-    existing_profile = find_profile(existing.profileId)
-    if not response or not existing_profile:
-        raise HTTPException(status_code=400, detail={"error": "报告输入数据不完整"})
 
-    try:
-        profile = await analyze_career_profile(response)
-    except ProfileAnalysisError as error:
-        raise HTTPException(
-            status_code=502,
-            detail={"stage": "用户画像重新生成失败", "error": str(error)},
-        ) from error
-
-    profile.id = existing_profile.id
-    profile.createdAt = existing_profile.createdAt
-
-    try:
-        regenerated = await generate_report(response, profile)
-    except ReportGenerationError as error:
-        raise HTTPException(
-            status_code=502,
-            detail={"stage": "生涯报告重新生成失败", "error": str(error)},
-        ) from error
-    regenerated.id = existing.id
-    regenerated.retryCount = existing.retryCount + 1
-    regenerated.createdAt = existing.createdAt
-    regenerated.updatedAt = datetime.now(timezone.utc).isoformat()
-    update_profile(profile)
-    update_report(regenerated)
-
-    return {"reportId": regenerated.id, "generationStatus": regenerated.generationStatus}
+def _legacy_regeneration_disabled(report_id: str, user) -> None:
+    _get_report_or_404(report_id, user)
+    raise HTTPException(
+        status_code=410,
+        detail={
+            "error": "该重新生成入口已停用，请从“我的报告”选择“修改问卷重新生成”，以使用可恢复任务和每日配额。"
+        },
+    )
 
 
 @router.post("/reports/regenerate")
-async def regenerate_report_by_query(
+def regenerate_report_by_query(
     report_id: str = Query(alias="reportId"),
     user=Depends(require_user),
 ):
-    return await _regenerate_report(report_id, user)
+    return _legacy_regeneration_disabled(report_id, user)
 
 
 @router.post("/reports/{report_id}/regenerate")
-async def regenerate_report(report_id: str, user=Depends(require_user)):
-    return await _regenerate_report(report_id, user)
+def regenerate_report(report_id: str, user=Depends(require_user)):
+    return _legacy_regeneration_disabled(report_id, user)

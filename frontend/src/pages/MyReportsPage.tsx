@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { cancelAssessmentJob, type GenerationJobStatus } from "../api/assessments";
-import { fetchMyReports } from "../api/reports";
+import { deleteReport, fetchMyReports } from "../api/reports";
+import { useAuth } from "../auth/AuthContext";
+import { saveAssessmentPrefill } from "../storage/assessmentStorage";
 import type { CareerBlueprintReport } from "../types/report";
-
-const prefillKey = "siyuan_assessment_prefill_v1";
 
 function isActiveJob(job: GenerationJobStatus) {
   return job.status === "queued" || job.status === "running";
@@ -34,11 +34,14 @@ function reportSnapshot(report: CareerBlueprintReport) {
 
 export function MyReportsPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [reports, setReports] = useState<CareerBlueprintReport[]>([]);
   const [jobs, setJobs] = useState<GenerationJobStatus[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [cancellingJobId, setCancellingJobId] = useState("");
+  const [deletingReportId, setDeletingReportId] = useState("");
+  const [success, setSuccess] = useState("");
 
   useEffect(() => {
     let closed = false;
@@ -95,8 +98,35 @@ export function MyReportsPage() {
       setError("这份报告缺少原问卷数据，无法恢复修改。");
       return;
     }
-    window.localStorage.setItem(prefillKey, JSON.stringify(snapshot));
+    if (!user) {
+      setError("登录状态已失效，请重新登录。");
+      return;
+    }
+    saveAssessmentPrefill(user.id, snapshot);
     navigate("/assessment");
+  }
+
+  async function removeReport(report: CareerBlueprintReport) {
+    const confirmed = window.confirm(
+      `确定删除“${report.title}”吗？\n\n`
+      + "这会永久删除该报告、版本和反馈；不再被其他报告使用的关联问卷与画像也会删除，且无法撤销。"
+    );
+    if (!confirmed) return;
+
+    setDeletingReportId(report.id);
+    setError("");
+    setSuccess("");
+    try {
+      const result = await deleteReport(report.id);
+      const refreshed = await fetchMyReports();
+      setReports(refreshed.reports);
+      setJobs(refreshed.jobs);
+      setSuccess(result.message || "报告及关联数据已删除。");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "报告删除失败。");
+    } finally {
+      setDeletingReportId("");
+    }
   }
 
   return (
@@ -106,6 +136,7 @@ export function MyReportsPage() {
         <p>查看当前账号的生成进度、失败记录和已生成报告。</p>
       </div>
       {error && <div className="error">{error}</div>}
+      {success && <div className="success" role="status">{success}</div>}
       {loading ? (
         <div className="panel">报告加载中...</div>
       ) : !hasHistory ? (
@@ -164,6 +195,14 @@ export function MyReportsPage() {
                 </div>
                 <div className="report-history-actions">
                   <button className="button secondary" onClick={() => editFromReport(report)}>修改问卷重新生成</button>
+                  <button
+                    className="button danger"
+                    disabled={deletingReportId === report.id}
+                    onClick={() => removeReport(report)}
+                    type="button"
+                  >
+                    {deletingReportId === report.id ? "删除中..." : "删除"}
+                  </button>
                   <Link className="button" to={`/reports/${report.id}`}>查看报告</Link>
                 </div>
               </article>

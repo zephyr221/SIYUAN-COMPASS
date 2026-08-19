@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-# These rules are a concise transcription of docs/生涯问卷更新版.docx.
+# These rules are a concise transcription of docs/01-问卷与报告规范.md.
 # Do not expand them with additional personality or career assumptions.
 QUESTION_RULES: dict[str, dict[str, object]] = {
     "studentName": {
@@ -327,7 +327,7 @@ def render_question_rules(selected_confusions: list[str]) -> str:
     }
     return json.dumps(
         {
-            "source": "docs/生涯问卷更新版.docx",
+            "source": "docs/01-问卷与报告规范.md",
             "questionRules": QUESTION_RULES,
             "selectedCareerConfusionRules": selected_rules,
         },

@@ -10,6 +10,10 @@ export function fetchMyReports() {
   return apiRequest<{ reports: CareerBlueprintReport[]; jobs: GenerationJobStatus[] }>("/reports/mine");
 }
 
+export function deleteReport(reportId: string) {
+  return apiRequest<{ message: string }>(`/reports/${reportId}`, { method: "DELETE" });
+}
+
 export function submitReportFeedback(
   reportId: string,
   body: {

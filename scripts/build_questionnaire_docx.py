@@ -8,7 +8,9 @@ from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 
 
-OUT = Path("docs/思源Compass测评问卷清单.docx")
+# Legacy export helper. Current project documentation is maintained as Markdown
+# under docs/; keep generated Word previews outside that directory.
+OUT = Path("output/问卷规范预览.docx")
 
 
 SECTIONS = [

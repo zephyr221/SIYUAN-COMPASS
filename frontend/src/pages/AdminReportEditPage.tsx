@@ -48,6 +48,9 @@ export function AdminReportEditPage() {
         <p>保留 Markdown 标题和列表格式，保存后会立即覆盖当前报告正文。</p>
       </div>
       <section className="panel report-editor">
+        <p className="privacy-notice">
+          报告会向学生长期展示，请勿加入姓名、学号、联系方式或其他不必要的身份信息；明显的手机号、邮箱和长数字标识会被拒绝保存。
+        </p>
         <div className="field">
           <label>报告标题</label>
           <input className="input" value={title} onChange={(event) => setTitle(event.target.value)} />

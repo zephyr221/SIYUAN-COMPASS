@@ -28,7 +28,7 @@ class AssessmentResponseInput(BaseModel):
     contactInfo: str = ""
     educationStage: str = ""
     grade: str
-    gender: str
+    gender: str = ""
     collegeMajor: str
     hometown: Optional[str] = None
     mastersIntention: str
@@ -41,14 +41,14 @@ class AssessmentResponseInput(BaseModel):
     educationPathReasonOther: Optional[str] = None
     educationCertainty: int = Field(default=3, ge=1, le=5)
     fiveYearCity: str
-    fiveYearIncome: str
+    fiveYearIncome: str = ""
     fiveYearIndustry: str
     fiveYearRole: str
     fiveYearFamilyStatus: str
     fiveYearHousingPlan: str
     fiveYearHobbiesSkills: str
     tenYearCity: str
-    tenYearIncome: str
+    tenYearIncome: str = ""
     tenYearIndustry: str
     tenYearRole: str
     tenYearFamilyStatus: str

@@ -10,7 +10,11 @@ from pydantic import ValidationError
 from app.llm.provider import create_chat_completion, get_llm_configuration_error, is_llm_configured
 from app.schemas.assessment import AssessmentResponse
 from app.schemas.profile import CareerProfile, ProfileAnalysisResult
-from app.services.profile_prompt import PROFILE_PROMPT_VERSION, build_profile_messages
+from app.services.profile_prompt import (
+    PROFILE_PROMPT_VERSION,
+    build_profile_messages,
+    redact_model_forbidden_values,
+)
 
 
 class ProfileAnalysisError(RuntimeError):
@@ -131,7 +135,9 @@ async def analyze_career_profile(
         try:
             if progress_callback:
                 progress_callback("profile_validating", 45, "画像已返回，正在校验证据、矛盾和三路径结构。")
-            analysis = _parse_profile_json(result["content"])
+            analysis = _parse_profile_json(
+                redact_model_forbidden_values(result["content"], response)
+            )
             break
         except ProfileAnalysisError as error:
             finish_reason = result.get("finishReason") or "unknown"
@@ -150,7 +156,6 @@ async def analyze_career_profile(
         modelName=result["modelName"],
         promptVersion=PROFILE_PROMPT_VERSION,
         createdAt=datetime.now(timezone.utc).isoformat(),
-        rawModelOutput=result["content"],
         qualityWarnings=_collect_quality_warnings(analysis),
         evidence=[
             evidence

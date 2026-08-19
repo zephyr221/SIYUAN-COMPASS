@@ -1,8 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { createAssessmentJob, fetchAssessmentJob } from "../api/assessments";
-import type { GenerationJobStatus } from "../api/assessments";
+import {
+  deleteAssessmentDraft as deleteCloudAssessmentDraft,
+  fetchAssessmentDraft,
+  createAssessmentJob,
+  fetchAssessmentJob,
+  saveAssessmentDraft as saveCloudAssessmentDraft
+} from "../api/assessments";
+import type { AssessmentDraft, GenerationJobStatus } from "../api/assessments";
+import { useAuth } from "../auth/AuthContext";
 import { ChoiceGroup, RadioGroup, ScoreRows } from "../components/FormControls";
+import { VoiceInputButton } from "../components/VoiceInputButton";
 import {
   careerConfusionOptions,
   careerRiskPreferenceOptions,
@@ -39,8 +47,31 @@ import {
   valueOptions
 } from "../features/assessment/options";
 import type { AssessmentResponseInput } from "../types/assessment";
+import {
+  readAssessmentDraft,
+  removeAssessmentDraft,
+  saveAssessmentDraft,
+  takeAssessmentPrefill
+} from "../storage/assessmentStorage";
 
 const steps = ["基本信息", "教育路径", "未来愿景", "价值能力兴趣", "学业与经历", "行动与承压", "核心困惑"];
+const voiceInputFields = new Set<keyof AssessmentResponseInput>([
+  "mastersPlan",
+  "phdPlan",
+  "educationPathReasonOther",
+  "fiveYearHobbiesSkills",
+  "tenYearHobbiesSkills",
+  "traitEvidence",
+  "immersiveActivities",
+  "favoriteKnowledgeAreas",
+  "selfDrivenActivities",
+  "transferReason",
+  "currentPreparationOther",
+  "preparationDetails",
+  "jobInfoChannelOther",
+  "careerConfusionOther",
+  "mainConfusionText"
+]);
 const generationSteps = [
   { progress: 5, label: "问卷已提交" },
   { progress: 10, label: "整理问卷" },
@@ -50,16 +81,13 @@ const generationSteps = [
   { progress: 88, label: "校验报告" },
   { progress: 100, label: "完成" }
 ];
-const draftKey = "siyuan_assessment_draft_v2";
-const prefillKey = "siyuan_assessment_prefill_v1";
-
 const initialForm: AssessmentResponseInput = {
   studentName: "",
   studentNumber: "",
   contactInfo: "",
   educationStage: "本科",
   grade: "大三",
-  gender: "不便透露",
+  gender: "",
   collegeMajor: "",
   hometown: "",
   mastersIntention: "尚未确定",
@@ -132,12 +160,12 @@ const initialForm: AssessmentResponseInput = {
 
 const testForm: AssessmentResponseInput = {
   ...initialForm,
-  studentName: "测试学生",
-  studentNumber: "DEV-20260704",
-  contactInfo: "dev@example.com",
+  studentName: "",
+  studentNumber: "",
+  contactInfo: "",
   educationStage: "本科",
   grade: "大三",
-  gender: "不便透露",
+  gender: "女",
   collegeMajor: "计算机学院 / 软件工程",
   hometown: "上海",
   mastersIntention: "正在准备考研",
@@ -149,14 +177,14 @@ const testForm: AssessmentResponseInput = {
   educationPathReasons: ["提升学历和平台", "目标职业需要更高学历", "还没有想清楚，只是暂时倾向"],
   educationPathReasonOther: "",
   fiveYearCity: "上海或杭州",
-  fiveYearIncome: "希望收入能覆盖基本生活并保持一定储蓄",
+  fiveYearIncome: "暂不确定，希望达到与岗位职责和城市生活成本相匹配的水平",
   fiveYearIndustry: "互联网产品技术、企业数字化或教育科技",
   fiveYearRole: "产品经理、数据分析或研发转产品岗位",
   fiveYearFamilyStatus: "有稳定伴侣暂不婚育",
   fiveYearHousingPlan: "先租住在通勤方便的区域，重点保证学习和工作节奏稳定",
   fiveYearHobbiesSkills: "保持跑步和阅读习惯，形成数据分析、产品调研、结构化表达和项目推进能力。",
   tenYearCity: "长三角核心城市",
-  tenYearIncome: "希望形成稳定上升的职业回报和抗风险能力",
+  tenYearIncome: "暂不确定，希望形成稳定的职业发展和收入来源",
   tenYearIndustry: "数字化服务、AI 应用或教育科技",
   tenYearRole: "能独立负责业务模块的产品负责人或复合型项目负责人",
   tenYearFamilyStatus: "暂不确定",
@@ -218,7 +246,6 @@ const requiredFields: Array<{
   message: string;
   validate?: (form: AssessmentResponseInput) => boolean;
 }> = [
-  { key: "contactInfo", step: 0, message: "请填写联系方式" },
   { key: "educationStage", step: 0, message: "请选择学历阶段" },
   { key: "grade", step: 0, message: "请选择年级" },
   { key: "gender", step: 0, message: "请选择性别" },
@@ -231,14 +258,14 @@ const requiredFields: Array<{
   { key: "educationPathReasons", step: 1, message: "请选择1—3项教育路径原因", validate: (form) => form.educationPathReasons.length > 0 && form.educationPathReasons.length <= 3 },
   { key: "educationPathReasonOther", step: 1, message: "请填写其他教育路径原因", validate: (form) => !form.educationPathReasons.includes("其他") || hasText(form.educationPathReasonOther) },
   { key: "fiveYearCity", step: 2, message: "请填写5年后希望生活或工作的城市" },
-  { key: "fiveYearIncome", step: 2, message: "请填写5年后希望达到的收入状态" },
+  { key: "fiveYearIncome", step: 2, message: "请填写5年后预期收入" },
   { key: "fiveYearIndustry", step: 2, message: "请填写5年后希望进入或深耕的行业领域" },
   { key: "fiveYearRole", step: 2, message: "请填写5年后希望从事的岗位或角色" },
   { key: "fiveYearFamilyStatus", step: 2, message: "请选择5年后的家庭或亲密关系状态" },
   { key: "fiveYearHousingPlan", step: 2, message: "请填写5年后的居住或住房状态" },
   { key: "fiveYearHobbiesSkills", step: 2, message: "请填写5年后希望保留的爱好或核心技能" },
   { key: "tenYearCity", step: 2, message: "请填写10年后希望生活或工作的城市" },
-  { key: "tenYearIncome", step: 2, message: "请填写10年后希望达到的收入状态" },
+  { key: "tenYearIncome", step: 2, message: "请填写10年后预期收入" },
   { key: "tenYearIndustry", step: 2, message: "请填写10年后希望进入或深耕的行业领域" },
   { key: "tenYearRole", step: 2, message: "请填写10年后希望从事的岗位或角色" },
   { key: "tenYearFamilyStatus", step: 2, message: "请选择10年后的家庭或亲密关系状态" },
@@ -339,8 +366,49 @@ function hasFieldErrors(error: unknown): error is Error & { fieldErrors: Record<
   return error instanceof Error && "fieldErrors" in error && !!error.fieldErrors;
 }
 
+function isAbortError(error: unknown) {
+  return error instanceof DOMException && error.name === "AbortError";
+}
+
+function draftTimeLabel(value: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : date.toLocaleString("zh-CN", { hour12: false });
+}
+
+function draftSyncLabel(status: DraftSyncState, savedAt: string | null) {
+  if (status === "loading") return "正在读取云端草稿…";
+  if (status === "saving") return "正在保存草稿…";
+  if (status === "saved") return savedAt ? `草稿已保存 · ${draftTimeLabel(savedAt)}` : "草稿已保存";
+  if (status === "conflict") return "草稿在其他设备有更新，请刷新页面后恢复最新版本";
+  if (status === "offline") return "云端保存暂时失败，已保留本地草稿";
+  return "草稿会自动保存";
+}
+
+type DraftSyncState = "idle" | "loading" | "saving" | "saved" | "offline" | "conflict";
+
+function waitForNextPoll(signal: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    const handleAbort = () => {
+      window.clearTimeout(timer);
+      reject(new DOMException("请求已取消", "AbortError"));
+    };
+    const timer = window.setTimeout(() => {
+      signal.removeEventListener("abort", handleAbort);
+      resolve();
+    }, 1000);
+
+    if (signal.aborted) {
+      handleAbort();
+    } else {
+      signal.addEventListener("abort", handleAbort, { once: true });
+    }
+  });
+}
+
 export function AssessmentPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const showDevTools = import.meta.env.DEV;
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<AssessmentResponseInput>(initialForm);
@@ -349,45 +417,135 @@ export function AssessmentPage() {
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [draftReady, setDraftReady] = useState(false);
   const [draftDirty, setDraftDirty] = useState(false);
+  const [draftOwnerId, setDraftOwnerId] = useState<string | null>(null);
+  const [cloudDraftPrompt, setCloudDraftPrompt] = useState<AssessmentDraft | null>(null);
+  const [draftSync, setDraftSync] = useState<DraftSyncState>("idle");
+  const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
+  const draftVersionRef = useRef(0);
+  const draftRequestRef = useRef<AbortController | null>(null);
+  const draftSaveTimerRef = useRef<number | null>(null);
+  const draftSaveControllerRef = useRef<AbortController | null>(null);
   const [generationJob, setGenerationJob] = useState<GenerationJobStatus | null>(null);
+  const mountedRef = useRef(true);
+  const pollControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    const prefill = window.localStorage.getItem(prefillKey);
-    if (prefill) {
-      try {
-        const parsed = JSON.parse(prefill) as AssessmentPrefill;
-        setForm(formFromPartial(parsed));
-        setDraftDirty(true);
-        window.localStorage.removeItem(prefillKey);
-        window.localStorage.removeItem(draftKey);
-        setDraftReady(true);
-        return;
-      } catch {
-        window.localStorage.removeItem(prefillKey);
-      }
-    }
-
-    const saved = window.localStorage.getItem(draftKey);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved) as AssessmentPrefill;
-        if (window.confirm("检测到未提交草稿，是否恢复？")) {
-          setForm(formFromPartial(parsed));
-          setDraftDirty(true);
-        } else {
-          window.localStorage.removeItem(draftKey);
-        }
-      } catch {
-        window.localStorage.removeItem(draftKey);
-      }
-    }
-    setDraftReady(true);
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      pollControllerRef.current?.abort();
+      draftRequestRef.current?.abort();
+      draftSaveControllerRef.current?.abort();
+      if (draftSaveTimerRef.current !== null) window.clearTimeout(draftSaveTimerRef.current);
+    };
   }, []);
 
   useEffect(() => {
-    if (!draftReady || !draftDirty || submitting) return;
-    window.localStorage.setItem(draftKey, JSON.stringify(form));
-  }, [draftDirty, draftReady, form, submitting]);
+    pollControllerRef.current?.abort();
+    pollControllerRef.current = null;
+    draftRequestRef.current?.abort();
+    draftRequestRef.current = null;
+    draftSaveControllerRef.current?.abort();
+    draftSaveControllerRef.current = null;
+    if (draftSaveTimerRef.current !== null) window.clearTimeout(draftSaveTimerRef.current);
+    draftSaveTimerRef.current = null;
+    setSubmitting(false);
+    setDraftReady(false);
+    setDraftOwnerId(null);
+    setDraftDirty(false);
+    setCloudDraftPrompt(null);
+    setDraftSync("idle");
+    setDraftSavedAt(null);
+    draftVersionRef.current = 0;
+    setStep(0);
+    setForm(initialForm);
+    setError("");
+    setFieldErrors({});
+    setGenerationJob(null);
+    if (!user) return;
+
+    const prefill = takeAssessmentPrefill<AssessmentPrefill>(user.id);
+    if (prefill) {
+      setForm(formFromPartial(prefill));
+      setDraftDirty(true);
+      removeAssessmentDraft(user.id);
+      void deleteCloudAssessmentDraft().catch(() => undefined);
+      setDraftOwnerId(user.id);
+      setDraftReady(true);
+      return;
+    }
+
+    const saved = readAssessmentDraft<AssessmentPrefill>(user.id);
+    const controller = new AbortController();
+    draftRequestRef.current = controller;
+    setDraftSync("loading");
+    fetchAssessmentDraft(controller.signal).then(({ draft }) => {
+      if (!mountedRef.current || controller.signal.aborted) return;
+      if (draft) {
+        draftVersionRef.current = draft.version;
+        setForm(formFromPartial(draft.answers));
+        setStep(draft.currentStep);
+        setDraftDirty(false);
+        setCloudDraftPrompt(draft);
+        setDraftSavedAt(draft.updatedAt);
+        setDraftSync("saved");
+      } else if (saved) {
+        if (window.confirm("检测到当前账号本地保存的未提交草稿，是否恢复？")) {
+          setForm(formFromPartial(saved));
+          setDraftDirty(true);
+        } else {
+          removeAssessmentDraft(user.id);
+        }
+        setDraftSync("idle");
+      } else {
+        setDraftSync("idle");
+      }
+      setDraftOwnerId(user.id);
+      setDraftReady(true);
+    }).catch((caught) => {
+      if (!mountedRef.current || controller.signal.aborted || isAbortError(caught)) return;
+      if (saved && window.confirm("云端草稿暂时无法读取，检测到本地草稿，是否恢复？")) {
+        setForm(formFromPartial(saved));
+        setDraftDirty(true);
+      }
+      setDraftSync("offline");
+      setDraftOwnerId(user.id);
+      setDraftReady(true);
+    });
+    return () => controller.abort();
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user || draftOwnerId !== user.id || !draftReady || !draftDirty || submitting || cloudDraftPrompt) return;
+    saveAssessmentDraft(user.id, form);
+    setDraftSync("saving");
+    if (draftSaveTimerRef.current !== null) window.clearTimeout(draftSaveTimerRef.current);
+    const controller = new AbortController();
+    draftSaveControllerRef.current?.abort();
+    draftSaveControllerRef.current = controller;
+    draftSaveTimerRef.current = window.setTimeout(() => {
+      void saveCloudAssessmentDraft(
+        { answers: form, currentStep: step, version: draftVersionRef.current },
+        controller.signal
+      ).then((draft) => {
+        if (!mountedRef.current || controller.signal.aborted) return;
+        draftVersionRef.current = draft.version;
+        setDraftSavedAt(draft.updatedAt);
+        setDraftSync("saved");
+        if (draftSaveControllerRef.current === controller) draftSaveControllerRef.current = null;
+      }).catch((caught) => {
+        if (!mountedRef.current || controller.signal.aborted || isAbortError(caught)) return;
+        setDraftSync(caught instanceof Error && "status" in caught && caught.status === 409 ? "conflict" : "offline");
+        if (draftSaveControllerRef.current === controller) draftSaveControllerRef.current = null;
+      });
+    }, 900);
+    return () => {
+      if (draftSaveTimerRef.current !== null) window.clearTimeout(draftSaveTimerRef.current);
+      draftSaveTimerRef.current = null;
+      controller.abort();
+      if (draftSaveControllerRef.current === controller) draftSaveControllerRef.current = null;
+    };
+  }, [cloudDraftPrompt, draftDirty, draftOwnerId, draftReady, form, step, submitting, user]);
 
   const patch = <K extends keyof AssessmentResponseInput>(key: K, value: AssessmentResponseInput[K]) => {
     setDraftDirty(true);
@@ -399,6 +557,22 @@ export function AssessmentPage() {
       return next;
     });
   };
+
+  function appendVoiceText(key: keyof AssessmentResponseInput, text: string) {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    setDraftDirty(true);
+    setForm((prev) => {
+      const current = String(prev[key] || "").trim();
+      return { ...prev, [key]: `${current ? `${current}\n` : ""}${trimmed}` };
+    });
+    setFieldErrors((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  }
 
   function markErrors(nextErrors: FieldErrors) {
     setFieldErrors(nextErrors);
@@ -421,9 +595,13 @@ export function AssessmentPage() {
     setError("");
     setFieldErrors({});
     setGenerationJob(null);
+    pollControllerRef.current?.abort();
+    const controller = new AbortController();
+    pollControllerRef.current = controller;
 
     try {
-      const created = await createAssessmentJob(form);
+      const created = await createAssessmentJob(form, controller.signal);
+      if (!mountedRef.current) return;
       setGenerationJob({
         jobId: created.jobId,
         status: "queued",
@@ -433,11 +611,15 @@ export function AssessmentPage() {
       });
 
       for (let attempt = 0; attempt < 600; attempt += 1) {
-        const job = await fetchAssessmentJob(created.jobId);
+        const job = await fetchAssessmentJob(created.jobId, controller.signal);
+        if (!mountedRef.current) return;
         setGenerationJob(job);
 
         if (job.status === "success" && job.reportId && job.userId) {
-          window.localStorage.removeItem(draftKey);
+          if (user) {
+            removeAssessmentDraft(user.id);
+            void deleteCloudAssessmentDraft().catch(() => undefined);
+          }
           navigate(`/reports/${job.reportId}`);
           return;
         }
@@ -450,11 +632,12 @@ export function AssessmentPage() {
           throw new Error(job.message || "报告生成已取消。");
         }
 
-        await new Promise((resolve) => window.setTimeout(resolve, 1000));
+        await waitForNextPoll(controller.signal);
       }
 
       throw new Error("生成等待时间超过10分钟，请检查后端日志或稍后重试。");
     } catch (caught) {
+      if (controller.signal.aborted || isAbortError(caught)) return;
       if (hasFieldErrors(caught)) {
         const serverFieldErrors = caught.fieldErrors as FieldErrors;
         markErrors(serverFieldErrors);
@@ -462,7 +645,10 @@ export function AssessmentPage() {
       }
       setError(caught instanceof Error ? caught.message : "提交失败，请稍后重试。");
     } finally {
-      setSubmitting(false);
+      if (pollControllerRef.current === controller) {
+        pollControllerRef.current = null;
+        if (mountedRef.current) setSubmitting(false);
+      }
     }
   }
 
@@ -484,8 +670,41 @@ export function AssessmentPage() {
   }
 
   function goToStep(nextStep: number) {
+    setDraftDirty(true);
     setStep(nextStep);
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function continueCloudDraft() {
+    if (cloudDraftPrompt) {
+      setForm(formFromPartial(cloudDraftPrompt.answers));
+      setStep(cloudDraftPrompt.currentStep);
+    }
+    setCloudDraftPrompt(null);
+    setDraftDirty(true);
+  }
+
+  function discardCloudDraft() {
+    if (draftSaveTimerRef.current !== null) window.clearTimeout(draftSaveTimerRef.current);
+    draftSaveTimerRef.current = null;
+    draftSaveControllerRef.current?.abort();
+    draftSaveControllerRef.current = null;
+    setCloudDraftPrompt(null);
+    setDraftDirty(false);
+    setDraftSync("idle");
+    setDraftSavedAt(null);
+    draftVersionRef.current = 0;
+    setStep(0);
+    setForm(initialForm);
+    setDraftOwnerId(user?.id || null);
+    if (user) {
+      removeAssessmentDraft(user.id);
+      void deleteCloudAssessmentDraft().catch(() => undefined);
+    }
+  }
+
+  function refreshAfterDraftConflict() {
+    window.location.reload();
   }
 
   const currentGradeOptions = gradeOptionsByStage[form.educationStage] ?? gradeOptionsByStage["本科"];
@@ -584,12 +803,20 @@ export function AssessmentPage() {
       <label>{requiredLabel(key, label)}</label>
       {questionFlags(key)}
       {multiline ? (
-        <textarea
-          className="textarea"
-          placeholder={placeholder}
-          value={(form[key] as string | undefined) || ""}
-          onChange={(event) => patch(key, event.target.value as never)}
-        />
+        <>
+          <textarea
+            className="textarea"
+            placeholder={placeholder}
+            value={(form[key] as string | undefined) || ""}
+            onChange={(event) => patch(key, event.target.value as never)}
+          />
+          {voiceInputFields.has(key) && (
+            <VoiceInputButton
+              disabled={submitting}
+              onTranscript={(text) => appendVoiceText(key, text)}
+            />
+          )}
+        </>
       ) : (
         <input
           className="input"
@@ -629,6 +856,26 @@ export function AssessmentPage() {
         <p>请尽量填写具体。你的回答仅用于生成个人生涯规划报告和产品优化分析。</p>
       </div>
 
+      {draftReady && (
+        <div className={`draft-status draft-status-${draftSync}`} role="status">
+          <span>{draftSyncLabel(draftSync, draftSavedAt)}</span>
+          {draftSync === "conflict" && <button className="text-link" type="button" onClick={refreshAfterDraftConflict}>刷新并恢复</button>}
+        </div>
+      )}
+
+      {cloudDraftPrompt && (
+        <section className="draft-banner" role="alert">
+          <div>
+            <strong>检测到云端未完成草稿</strong>
+            <p>上次保存于 {draftTimeLabel(cloudDraftPrompt.updatedAt)}，是否继续填写？</p>
+          </div>
+          <div className="draft-actions">
+            <button className="button" type="button" onClick={continueCloudDraft}>继续填写</button>
+            <button className="button secondary" type="button" onClick={discardCloudDraft}>重新开始</button>
+          </div>
+        </section>
+      )}
+
       {showDevTools && (
         <section className="dev-tools-panel">
           <div>
@@ -658,10 +905,9 @@ export function AssessmentPage() {
         <section className="panel">
           {step === 0 && (
             <>
-              <p className="hint">以下信息仅用于报告归属、测试回访和系统优化，不会用于公开展示。</p>
-              {textField("studentName", "你的姓名是？（选填）", false, "例如：张同学")}
-              {textField("studentNumber", "你的学号是？（选填）", false, "用于区分同名学生")}
-              {textField("contactInfo", "你的联系方式是？", false, "手机号、邮箱或微信号均可")}
+              {textField("studentName", "姓名（选填）", false, "可填写真实姓名或常用称呼")}
+              {textField("studentNumber", "学号（选填）", false, "如不便填写可以留空")}
+              {textField("contactInfo", "联系方式（选填）", false, "如需后续联系可填写手机号、邮箱等")}
               <div className={fieldClass("educationStage")} data-field="educationStage">
                 <label>{requiredLabel("educationStage", "你当前的学历阶段是？")}</label>
                 {questionFlags("educationStage")}
@@ -674,12 +920,7 @@ export function AssessmentPage() {
                 <RadioGroup options={currentGradeOptions} value={form.grade} onChange={(value) => patch("grade", value)} />
                 {fieldError("grade")}
               </div>
-              <div className={fieldClass("gender")} data-field="gender">
-                <label>{requiredLabel("gender", "你的性别是？")}</label>
-                {questionFlags("gender")}
-                <RadioGroup options={genderOptions} value={form.gender} onChange={(value) => patch("gender", value)} />
-                {fieldError("gender")}
-              </div>
+              {radioField("gender", "你的性别是？", genderOptions)}
               {textField("collegeMajor", "你的学院和专业是？", false, "例如：计算机学院 / 计算机科学与技术")}
               {textField("hometown", "你的家乡或主要成长地是？", false, "例如：上海")}
             </>
@@ -720,7 +961,7 @@ export function AssessmentPage() {
             <>
               <h2 className="form-subtitle">5年后的愿景</h2>
               {textField("fiveYearCity", "你希望生活或工作的城市是？")}
-              {textField("fiveYearIncome", "你希望达到怎样的收入状态？", false, "可填写月收入、年收入或生活水平")}
+              {textField("fiveYearIncome", "你对5年后预期收入的看法是？", false, "例如：暂不确定，或填写个人预期")}
               {textField("fiveYearIndustry", "你希望进入或深耕什么行业、领域？")}
               {textField("fiveYearRole", "你希望从事什么岗位、承担什么角色？")}
               <div className={fieldClass("fiveYearFamilyStatus")} data-field="fiveYearFamilyStatus">
@@ -734,7 +975,7 @@ export function AssessmentPage() {
 
               <h2 className="form-subtitle">10年后的愿景</h2>
               {textField("tenYearCity", "你希望生活或工作的城市是？")}
-              {textField("tenYearIncome", "你希望达到怎样的收入状态？", false, "可填写月收入、年收入或生活水平")}
+              {textField("tenYearIncome", "你对10年后预期收入的看法是？", false, "例如：暂不确定，或填写个人预期")}
               {textField("tenYearIndustry", "你希望进入或深耕什么行业、领域？")}
               {textField("tenYearRole", "你希望从事什么岗位、承担什么角色？")}
               <div className={fieldClass("tenYearFamilyStatus")} data-field="tenYearFamilyStatus">

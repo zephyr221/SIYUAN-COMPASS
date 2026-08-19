@@ -1,21 +1,20 @@
 from app.schemas.assessment import AssessmentResponseInput
 
 REQUIRED_STRING_FIELDS = {
-    "contactInfo": "请填写联系方式",
     "educationStage": "请选择学历阶段",
     "grade": "请选择年级",
     "gender": "请选择性别",
     "collegeMajor": "请填写学院和专业",
     "hometown": "请填写家乡或主要成长地",
     "fiveYearCity": "请填写5年后希望生活或工作的城市",
-    "fiveYearIncome": "请填写5年后希望达到的收入状态",
+    "fiveYearIncome": "请填写5年后预期收入",
     "fiveYearIndustry": "请填写5年后希望进入或深耕的行业领域",
     "fiveYearRole": "请填写5年后希望从事的岗位或角色",
     "fiveYearFamilyStatus": "请选择5年后的家庭或亲密关系状态",
     "fiveYearHousingPlan": "请填写5年后的居住或住房状态",
     "fiveYearHobbiesSkills": "请填写5年后希望保留的爱好或核心技能",
     "tenYearCity": "请填写10年后希望生活或工作的城市",
-    "tenYearIncome": "请填写10年后希望达到的收入状态",
+    "tenYearIncome": "请填写10年后预期收入",
     "tenYearIndustry": "请填写10年后希望进入或深耕的行业领域",
     "tenYearRole": "请填写10年后希望从事的岗位或角色",
     "tenYearFamilyStatus": "请选择10年后的家庭或亲密关系状态",

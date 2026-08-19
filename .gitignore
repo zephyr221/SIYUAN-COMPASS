@@ -17,6 +17,19 @@ __pycache__/
 .venv/
 backend/.venv/
 
+# 测试与 Python 工具缓存
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage/
+htmlcov/
+.tox/
+.nox/
+
+# TypeScript 构建缓存
+*.tsbuildinfo
+
 data/*.json
 data/local-postgres/
 !data/.gitkeep
@@ -24,3 +37,18 @@ data/local-postgres/
 # This project uses package-lock.json; keep local pnpm bootstrap files out.
 frontend/pnpm-lock.yaml
 frontend/pnpm-workspace.yaml
+skills-lock.json
+.agents/
+
+
+# 外部规范与本地开发待办，不纳入版本库
+docs/交我办移动端设计规范.pdf
+docs/TODO.md
+
+# 本地 Docker 镜像包
+siyuan-compass-images-*.tar.gz
+
+# vite.config.ts 的编译产物。vite 解析配置时 .js 优先于 .ts，
+# 这些文件一旦被提交就会顶掉 vite.config.ts，导致改了 .ts 却不生效。
+frontend/vite.config.js
+frontend/vite.config.d.ts
