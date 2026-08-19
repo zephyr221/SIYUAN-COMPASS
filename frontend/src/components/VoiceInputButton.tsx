@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { transcribeAudio } from "../api/speech";
+import { isSpeechConfigured } from "../api/speechAvailability";
 
 type VoiceInputButtonProps = {
   disabled?: boolean;
@@ -111,6 +112,7 @@ export function VoiceInputButton({ disabled = false, onTranscript }: VoiceInputB
   const timerRef = useRef<number | null>(null);
   const cancelledRef = useRef(false);
   const mountedRef = useRef(true);
+  const [configured, setConfigured] = useState<boolean | null>(null);
 
   const stopTracks = () => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -139,6 +141,16 @@ export function VoiceInputButton({ disabled = false, onTranscript }: VoiceInputB
       clearTimer();
       if (recorderRef.current && recorderRef.current.state !== "inactive") recorderRef.current.stop();
       stopTracks();
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    isSpeechConfigured().then((value) => {
+      if (active) setConfigured(value);
+    });
+    return () => {
+      active = false;
     };
   }, []);
 
@@ -217,6 +229,10 @@ export function VoiceInputButton({ disabled = false, onTranscript }: VoiceInputB
     if (recorderRef.current?.state === "recording") recorderRef.current.stop();
     else reset();
   }
+
+  // 后端 SPEECH_PROVIDER=disabled 或密钥未配置时整个控件不渲染。
+  // 上游把按钮无条件挂了出来，关闭状态下点完录音只会拿到 503。
+  if (!configured) return null;
 
   return (
     <div className="voice-input-control">

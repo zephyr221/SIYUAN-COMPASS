@@ -1,5 +1,7 @@
 import react from "@vitejs/plugin-react";
-import { defineConfig, loadEnv } from "vitest/config";
+import { loadEnv } from "vite";
+// defineConfig 取自 vitest/config 才能带上 test 段的类型；vitest/config 不转出 loadEnv。
+import { defineConfig } from "vitest/config";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, "../", "");

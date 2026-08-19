@@ -10,6 +10,9 @@ function AccountSwitcher() {
       onClick={() => completeLogin({
         token: "token-b",
         user: {
+          // authSource 由 sjtu-production 分支引入，用于区分本地账号与 jAccount。
+          // 本用例考察的是草稿隔离，与登录来源无关，沿用上游原本的本地账号语义。
+          authSource: "local",
           displayName: "学生 B",
           id: "user-b",
           role: "student",
@@ -27,6 +30,7 @@ describe("AuthProvider", () => {
   it("切换账号时清理上一账号草稿且不读取新账号草稿", () => {
     window.localStorage.setItem("siyuan_auth_token", "token-a");
     window.localStorage.setItem("siyuan_auth_user", JSON.stringify({
+      authSource: "local",
       displayName: "学生 A",
       id: "user-a",
       role: "student",
@@ -46,6 +50,7 @@ describe("AuthProvider", () => {
   it("登录失效时按强制退出处理并清理当前账号草稿", () => {
     window.localStorage.setItem("siyuan_auth_token", "token-a");
     window.localStorage.setItem("siyuan_auth_user", JSON.stringify({
+      authSource: "local",
       displayName: "学生 A",
       id: "user-a",
       role: "student",
