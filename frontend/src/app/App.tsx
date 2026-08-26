@@ -23,7 +23,7 @@ export function App() {
     <div className="app-shell">
       <header className="topbar">
         <div className="shell topbar-inner">
-          <Link className="brand" to="/">大学生生涯规划智能小助手</Link>
+          <Link className="brand" to="/">交小航——你的AI生涯伙伴</Link>
           <nav className="nav">
             {user && <NavLink to="/assessment">开始填写</NavLink>}
             {user && <NavLink to="/my-reports">我的报告</NavLink>}

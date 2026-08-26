@@ -47,7 +47,7 @@ export function HomePage() {
   return (
     <main className="shell hero">
       <section>
-        <h1>大学生生涯规划智能小助手</h1>
+        <h1>交小航——你的AI生涯伙伴</h1>
         <p className="lead">
           用8-12分钟完成首次填写，生成一份个性化《我的生涯蓝图》。系统会帮你梳理未来愿景、当前优势、路径风险和接下来6个月的行动建议。
         </p>

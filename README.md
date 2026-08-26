@@ -1,4 +1,4 @@
-# 大学生生涯规划智能小助手
+# 交小航——你的AI生涯伙伴
 
 > **这是上海交通大学的部署分支（`sjtu-production`），不是产品主线。**
 > 学生上游仓库：[labixiaoji/SIYUAN-COMPASS](https://github.com/labixiaoji/SIYUAN-COMPASS)。
