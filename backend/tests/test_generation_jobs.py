@@ -88,7 +88,10 @@ class GenerationJobRecoveryTest(IsolatedAsyncioTestCase):
     @patch.object(generation_jobs, "list_recoverable_generation_job_ids")
     @patch.object(generation_jobs, "start_generation_job")
     def test_startup_recovers_all_durable_jobs(self, start, list_jobs, delete_old, settings):
-        settings.return_value = SimpleNamespace(generation_job_retention_days=30)
+        settings.return_value = SimpleNamespace(
+            generation_job_retention_days=30,
+            assessment_submission_maintenance=False,
+        )
         list_jobs.return_value = ["queued-job", "running-job"]
 
         count = generation_jobs.recover_generation_jobs()

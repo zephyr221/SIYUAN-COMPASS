@@ -139,6 +139,9 @@ def recover_generation_jobs() -> int:
     """Resume durable jobs and remove old terminal status records on startup."""
     settings = get_settings()
     delete_expired_generation_jobs(settings.generation_job_retention_days)
+    if settings.assessment_submission_maintenance:
+        logger.warning("generation job recovery skipped while assessment maintenance is active")
+        return 0
     job_ids = list_recoverable_generation_job_ids()
     for job_id in job_ids:
         start_generation_job(job_id)

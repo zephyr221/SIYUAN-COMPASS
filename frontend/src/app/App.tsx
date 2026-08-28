@@ -5,7 +5,7 @@ import { AppFooter } from "../components/AppFooter";
 import { AdminAssessmentPage } from "../pages/AdminAssessmentPage";
 import { AdminPage } from "../pages/AdminPage";
 import { AdminReportEditPage } from "../pages/AdminReportEditPage";
-import { AssessmentPage } from "../pages/AssessmentPage";
+import { AssessmentClosedPage } from "../pages/AssessmentClosedPage";
 import { FeedbackPage } from "../pages/FeedbackPage";
 import { HomePage } from "../pages/HomePage";
 import { LoginPage } from "../pages/LoginPage";
@@ -25,7 +25,7 @@ export function App() {
         <div className="shell topbar-inner">
           <Link className="brand" to="/">交小航——你的AI生涯伙伴</Link>
           <nav className="nav">
-            {user && <NavLink to="/assessment">开始填写</NavLink>}
+            {user && <NavLink to="/assessment">填写已关闭</NavLink>}
             {user && <NavLink to="/my-reports">我的报告</NavLink>}
             {user?.role === "admin" && <NavLink to="/admin">管理员后台</NavLink>}
             {user ? (
@@ -46,7 +46,7 @@ export function App() {
           {/* 生产环境走 jAccount，本地注册入口整条路由都不挂。 */}
           {enableLocalAuth && <Route path="/register" element={<RegisterPage />} />}
           <Route path="/privacy" element={<PrivacyPage />} />
-          <Route path="/assessment" element={<ProtectedRoute role="student"><AssessmentPage /></ProtectedRoute>} />
+          <Route path="/assessment" element={<ProtectedRoute role="student"><AssessmentClosedPage /></ProtectedRoute>} />
           <Route path="/my-reports" element={<ProtectedRoute role="student"><MyReportsPage /></ProtectedRoute>} />
           <Route path="/reports/:reportId" element={<ProtectedRoute><ReportPage /></ProtectedRoute>} />
           <Route path="/reports/:reportId/feedback" element={<ProtectedRoute role="student"><FeedbackPage /></ProtectedRoute>} />

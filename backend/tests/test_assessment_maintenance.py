@@ -42,11 +42,42 @@ class AssessmentMaintenanceTest(unittest.TestCase):
         with patch.object(assessments, "get_settings", return_value=self.settings(False)):
             assessments._require_submission_available()
 
-    def test_maintenance_does_not_disable_recovery_of_accepted_jobs(self):
+    def test_draft_write_is_rejected_during_maintenance(self):
+        with patch.object(assessments, "get_settings", return_value=self.settings(True)):
+            with self.assertRaises(HTTPException) as raised:
+                assessments.upsert_assessment_draft(None, user={"id": "user-1"})
+
+        self.assertEqual(raised.exception.status_code, 503)
+
+    def test_maintenance_disables_recovery_of_accepted_jobs(self):
         with patch.object(
             generation_jobs,
             "get_settings",
-            return_value=SimpleNamespace(generation_job_retention_days=30),
+            return_value=SimpleNamespace(
+                generation_job_retention_days=30,
+                assessment_submission_maintenance=True,
+            ),
+        ), patch.object(
+            generation_jobs,
+            "delete_expired_generation_jobs",
+        ), patch.object(
+            generation_jobs,
+            "list_recoverable_generation_job_ids",
+            return_value=["accepted-job"],
+        ), patch.object(generation_jobs, "start_generation_job") as start:
+            recovered = generation_jobs.recover_generation_jobs()
+
+        self.assertEqual(recovered, 0)
+        start.assert_not_called()
+
+    def test_recovery_remains_available_when_maintenance_is_off(self):
+        with patch.object(
+            generation_jobs,
+            "get_settings",
+            return_value=SimpleNamespace(
+                generation_job_retention_days=30,
+                assessment_submission_maintenance=False,
+            ),
         ), patch.object(
             generation_jobs,
             "delete_expired_generation_jobs",

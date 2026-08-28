@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 import { AuthProvider } from "../auth/AuthContext";
+import { AssessmentClosedPage } from "../pages/AssessmentClosedPage";
 import { App } from "./App";
 
 function renderApp(path: string) {
@@ -39,5 +40,16 @@ describe("App", () => {
     renderApp("/");
 
     expect(screen.getByRole("button", { name: "退出" })).toHaveClass("nav-logout");
+  });
+
+  it("学生访问问卷地址时只显示关闭说明", () => {
+    render(
+      <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <AssessmentClosedPage />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole("heading", { name: "问卷填写已关闭" })).toBeInTheDocument();
+    expect(screen.queryByText("生涯规划问卷")).not.toBeInTheDocument();
   });
 });

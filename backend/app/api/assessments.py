@@ -95,6 +95,7 @@ def upsert_assessment_draft(
     payload: AssessmentDraftUpsert,
     user=Depends(require_user),
 ) -> AssessmentDraft:
+    _require_submission_available()
     try:
         draft = save_assessment_draft(
             user["id"],
