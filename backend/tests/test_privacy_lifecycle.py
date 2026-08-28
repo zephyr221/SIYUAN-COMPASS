@@ -122,6 +122,20 @@ class DataMinimizationTest(TestCase):
         for field in json_db.ASSESSMENT_NON_PERSISTED_FIELDS:
             self.assertNotIn(field, stored)
 
+    def test_durable_job_redaction_never_mutates_internal_user_id(self):
+        stored = json_db._generation_input_storage_record(
+            {
+                "userId": "user-1-a",
+                "studentName": "a",
+                "studentNumber": "1",
+                "contactInfo": "user",
+                "mainConfusionText": "user 1 a",
+            }
+        )
+
+        self.assertEqual(stored["userId"], "user-1-a")
+        self.assertEqual(stored["mainConfusionText"], "[已脱敏] [已脱敏] [已脱敏]")
+
     def test_legacy_assessment_cleanup_uses_the_same_field_allowlist(self):
         result = Mock(rowcount=4)
         connection = Mock()

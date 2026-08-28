@@ -503,6 +503,7 @@ def _generation_input_storage_record(input_data: dict[str, Any]) -> dict[str, An
         field_name: input_data.get(field_name)
         for field_name in (
             *ASSESSMENT_DIRECT_IDENTIFIER_FIELDS,
+            "userId",
             "gender",
             "fiveYearIncome",
             "tenYearIncome",
@@ -1358,7 +1359,10 @@ def update_generation_job_conditionally(
     expected_statuses: tuple[str, ...],
     claim_token: str | None = None,
     clear_private_state: bool = False,
+    clear_input_data: bool | None = None,
 ) -> GenerationJobStatus | None:
+    if clear_input_data is None:
+        clear_input_data = clear_private_state
     clauses = ["job_id = %s", "status = ANY(%s)"]
     where_params: list[Any] = [job_id, list(expected_statuses)]
     if claim_token is not None:
@@ -1385,7 +1389,7 @@ def update_generation_job_conditionally(
                 new_status,
                 new_stage,
                 Jsonb(updates),
-                clear_private_state,
+                clear_input_data,
                 clear_private_state,
                 clear_private_state,
                 *where_params,

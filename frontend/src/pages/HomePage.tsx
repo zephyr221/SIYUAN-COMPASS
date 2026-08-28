@@ -3,9 +3,14 @@ import type { FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { changePassword } from "../api/auth";
 import { useAuth } from "../auth/AuthContext";
+import {
+  AssessmentMaintenanceBanner,
+  useAssessmentMaintenance
+} from "../components/AssessmentMaintenanceBanner";
 
 export function HomePage() {
   const { user } = useAuth();
+  const maintenance = useAssessmentMaintenance();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -48,11 +53,14 @@ export function HomePage() {
     <main className="shell hero">
       <section>
         <h1>交小航——你的AI生涯伙伴</h1>
+        <AssessmentMaintenanceBanner status={maintenance} />
         <p className="lead">
           用8-12分钟完成首次填写，生成一份个性化《我的生涯蓝图》。系统会帮你梳理未来愿景、当前优势、路径风险和接下来6个月的行动建议。
         </p>
         <div className="actions" style={{ justifyContent: "flex-start" }}>
-          <Link className="button" to="/assessment">开始填写</Link>
+          <Link className="button" to="/assessment">
+            {maintenance.active ? "查看已填写内容" : "开始填写"}
+          </Link>
         </div>
       </section>
       {user?.authSource === "local" ? (

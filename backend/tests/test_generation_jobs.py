@@ -154,6 +154,41 @@ class GenerationJobRecoveryTest(IsolatedAsyncioTestCase):
         self.assertTrue(update_job.call_args.kwargs["terminal"])
 
 
+class GenerationJobConcurrencyTest(IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        generation_jobs.GENERATION_LIMITERS.clear()
+
+    async def asyncTearDown(self):
+        generation_jobs.GENERATION_LIMITERS.clear()
+
+    @patch.object(generation_jobs, "get_settings")
+    async def test_excess_durable_jobs_wait_before_claiming_a_worker_slot(self, settings):
+        settings.return_value = SimpleNamespace(generation_max_concurrency=2)
+        started: list[str] = []
+        first_two_started = asyncio.Event()
+        release = asyncio.Event()
+
+        async def hold_worker_slot(job_id: str) -> None:
+            started.append(job_id)
+            if len(started) == 2:
+                first_two_started.set()
+            await release.wait()
+
+        with patch.object(generation_jobs, "_run_generation_job", side_effect=hold_worker_slot):
+            tasks = [
+                asyncio.create_task(generation_jobs.run_generation_job(f"job-{index}"))
+                for index in range(3)
+            ]
+            await asyncio.wait_for(first_two_started.wait(), timeout=1)
+            await asyncio.sleep(0)
+
+            self.assertEqual(len(started), 2)
+            release.set()
+            await asyncio.gather(*tasks)
+
+        self.assertCountEqual(started, ["job-0", "job-1", "job-2"])
+
+
 class GenerationJobCancellationTest(TestCase):
     @patch.object(generation_jobs, "ACTIVE_TASK_LOOPS", new_callable=dict)
     @patch.object(generation_jobs, "ACTIVE_TASKS", new_callable=dict)
@@ -189,6 +224,7 @@ class GenerationJobCancellationTest(TestCase):
             "job-1",
             "worker-token",
             terminal=True,
+            clear_input_data=True,
             status="success",
             stage="completed",
         )
@@ -197,6 +233,22 @@ class GenerationJobCancellationTest(TestCase):
         self.assertEqual(update.call_args.kwargs["expected_statuses"], ("running",))
         self.assertEqual(update.call_args.kwargs["claim_token"], "worker-token")
         self.assertTrue(update.call_args.kwargs["clear_private_state"])
+        self.assertTrue(update.call_args.kwargs["clear_input_data"])
+
+    @patch.object(generation_jobs, "update_generation_job_conditionally")
+    def test_failed_terminal_update_releases_claim_but_retains_recovery_input(self, update):
+        update.return_value = None
+
+        generation_jobs._update_running_job(
+            "job-1",
+            "worker-token",
+            terminal=True,
+            status="failed",
+            stage="profile_failed",
+        )
+
+        self.assertTrue(update.call_args.kwargs["clear_private_state"])
+        self.assertFalse(update.call_args.kwargs["clear_input_data"])
 
 
 if __name__ == "__main__":

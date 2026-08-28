@@ -1,6 +1,7 @@
 import httpx
 
 from app.core.config import get_settings
+from app.llm.http_client import build_llm_timeout, describe_llm_transport_error
 
 
 def is_deepseek_configured() -> bool:
@@ -19,26 +20,35 @@ async def create_deepseek_chat_completion(
         raise RuntimeError("缺少 AI_API_KEY 或 DEEPSEEK_API_KEY，无法调用校内 DeepSeek。")
 
     base_url = settings.effective_deepseek_base_url.rstrip("/")
-    async with httpx.AsyncClient(timeout=settings.llm_timeout_seconds) as client:
-        response = await client.post(
-            f"{base_url}/chat/completions",
-            headers={
-                "Authorization": f"Bearer {settings.effective_deepseek_api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": settings.effective_deepseek_model,
-                "messages": messages,
-                "temperature": temperature,
-                "max_tokens": max_tokens,
-                "stream": False,
-                **({"response_format": {"type": "json_object"}} if json_mode else {}),
-            },
-        )
-        try:
-            data = response.json()
-        except ValueError as error:
-            raise RuntimeError(f"DeepSeek API 返回了无法解析的响应：{response.status_code}") from error
+    try:
+        async with httpx.AsyncClient(
+            timeout=build_llm_timeout(settings.llm_timeout_seconds)
+        ) as client:
+            response = await client.post(
+                f"{base_url}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {settings.effective_deepseek_api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": settings.effective_deepseek_model,
+                    "messages": messages,
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                    "stream": False,
+                    **({"response_format": {"type": "json_object"}} if json_mode else {}),
+                },
+            )
+            try:
+                data = response.json()
+            except ValueError as error:
+                raise RuntimeError(
+                    f"DeepSeek API 返回了无法解析的响应：{response.status_code}"
+                ) from error
+    except httpx.RequestError as error:
+        raise RuntimeError(
+            describe_llm_transport_error("DeepSeek", settings.llm_timeout_seconds, error)
+        ) from error
 
     if response.status_code >= 400:
         message = data.get("error", {}).get("message") if isinstance(data, dict) else None

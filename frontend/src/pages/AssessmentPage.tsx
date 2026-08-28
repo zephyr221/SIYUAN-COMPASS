@@ -9,6 +9,10 @@ import {
 } from "../api/assessments";
 import type { AssessmentDraft, GenerationJobStatus } from "../api/assessments";
 import { useAuth } from "../auth/AuthContext";
+import {
+  AssessmentMaintenanceBanner,
+  useAssessmentMaintenance
+} from "../components/AssessmentMaintenanceBanner";
 import { ChoiceGroup, RadioGroup, ScoreRows } from "../components/FormControls";
 import { VoiceInputButton } from "../components/VoiceInputButton";
 import {
@@ -81,6 +85,8 @@ const generationSteps = [
   { progress: 88, label: "校验报告" },
   { progress: 100, label: "完成" }
 ];
+const GENERATION_POLL_INTERVAL_MS = 3000;
+const GENERATION_MAX_POLL_ATTEMPTS = 600;
 const initialForm: AssessmentResponseInput = {
   studentName: "",
   studentNumber: "",
@@ -396,7 +402,7 @@ function waitForNextPoll(signal: AbortSignal) {
     const timer = window.setTimeout(() => {
       signal.removeEventListener("abort", handleAbort);
       resolve();
-    }, 1000);
+    }, GENERATION_POLL_INTERVAL_MS);
 
     if (signal.aborted) {
       handleAbort();
@@ -409,6 +415,7 @@ function waitForNextPoll(signal: AbortSignal) {
 export function AssessmentPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const maintenance = useAssessmentMaintenance();
   const showDevTools = import.meta.env.DEV;
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<AssessmentResponseInput>(initialForm);
@@ -588,6 +595,11 @@ export function AssessmentPage() {
 
   async function submit() {
     if (submitting) return;
+    if (maintenance.active) {
+      setError(maintenance.message);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
     const nextErrors = validateForm(form);
     if (markErrors(nextErrors)) return;
 
@@ -607,10 +619,10 @@ export function AssessmentPage() {
         status: "queued",
         stage: "queued",
         progress: 5,
-        message: "问卷已接收，等待开始分析。"
+        message: "问卷已安全保存，正在排队等待分析。"
       });
 
-      for (let attempt = 0; attempt < 600; attempt += 1) {
+      for (let attempt = 0; attempt < GENERATION_MAX_POLL_ATTEMPTS; attempt += 1) {
         const job = await fetchAssessmentJob(created.jobId, controller.signal);
         if (!mountedRef.current) return;
         setGenerationJob(job);
@@ -635,7 +647,7 @@ export function AssessmentPage() {
         await waitForNextPoll(controller.signal);
       }
 
-      throw new Error("生成等待时间超过10分钟，请检查后端日志或稍后重试。");
+      throw new Error("页面等待已超过30分钟，任务仍会在后台继续，请到“我的报告”查看进度。");
     } catch (caught) {
       if (controller.signal.aborted || isAbortError(caught)) return;
       if (hasFieldErrors(caught)) {
@@ -855,6 +867,8 @@ export function AssessmentPage() {
         <h1>生涯规划问卷</h1>
         <p>请尽量填写具体。你的回答仅用于生成个人生涯规划报告和产品优化分析。</p>
       </div>
+
+      <AssessmentMaintenanceBanner status={maintenance} />
 
       {draftReady && (
         <div className={`draft-status draft-status-${draftSync}`} role="status">
@@ -1178,7 +1192,11 @@ export function AssessmentPage() {
           <div className="actions">
             {step > 0 && <button className="button secondary" disabled={submitting} onClick={() => goToStep(step - 1)}>上一步</button>}
             {step < steps.length - 1 && <button className="button" disabled={submitting} onClick={() => goToStep(step + 1)}>下一步</button>}
-            {step === steps.length - 1 && <button className="button" disabled={submitting} onClick={submit}>{submitting ? "生成中..." : "提交并生成报告"}</button>}
+            {step === steps.length - 1 && (
+              <button className="button" disabled={submitting || maintenance.active} onClick={submit}>
+                {maintenance.active ? "系统维护中" : submitting ? "生成中..." : "提交并生成报告"}
+              </button>
+            )}
           </div>
         </section>
       </div>

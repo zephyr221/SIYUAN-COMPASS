@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from contextlib import suppress
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -29,8 +30,13 @@ from app.storage.json_db import (
     update_generation_job_conditionally,
 )
 
+logger = logging.getLogger(__name__)
 ACTIVE_TASKS: dict[str, asyncio.Task[None]] = {}
 ACTIVE_TASK_LOOPS: dict[str, asyncio.AbstractEventLoop] = {}
+GENERATION_LIMITERS: dict[
+    asyncio.AbstractEventLoop,
+    tuple[int, asyncio.Semaphore],
+] = {}
 
 
 class ActiveGenerationJobError(RuntimeError):
@@ -61,7 +67,7 @@ def create_generation_job(
         status="queued",
         stage="queued",
         progress=5,
-        message="问卷已接收，等待开始分析。",
+        message="问卷已安全保存，正在排队等待分析。",
         userId=user_id,
         createdAt=now,
         updatedAt=now,
@@ -88,11 +94,28 @@ def create_generation_job(
         raise GenerationQuotaExceededError(limit=error.limit, used=error.used) from error
     if active_job:
         raise ActiveGenerationJobError(active_job)
+    logger.info("generation job accepted: job_id=%s", job_id)
     return job
 
 
 def get_generation_job(job_id: str) -> GenerationJobStatus | None:
     return find_generation_job(job_id)
+
+
+def _get_generation_limiter() -> asyncio.Semaphore:
+    """Return the per-process limiter for the current event loop.
+
+    Production runs one backend worker, so this is also the deployment-wide
+    model concurrency limit. Keeping a limiter per event loop prevents test and
+    reload loops from reusing an asyncio primitive bound to an old loop.
+    """
+    loop = asyncio.get_running_loop()
+    limit = max(get_settings().generation_max_concurrency, 1)
+    configured = GENERATION_LIMITERS.get(loop)
+    if configured is None or configured[0] != limit:
+        configured = (limit, asyncio.Semaphore(limit))
+        GENERATION_LIMITERS[loop] = configured
+    return configured[1]
 
 
 def _task_finished(job_id: str, task: asyncio.Task[None]) -> None:
@@ -185,6 +208,7 @@ def _update_running_job(
     claim_token: str,
     *,
     terminal: bool = False,
+    clear_input_data: bool = False,
     **updates: object,
 ) -> GenerationJobStatus | None:
     return update_generation_job_conditionally(
@@ -193,6 +217,7 @@ def _update_running_job(
         expected_statuses=("running",),
         claim_token=claim_token,
         clear_private_state=terminal,
+        clear_input_data=clear_input_data,
     )
 
 
@@ -208,6 +233,18 @@ def _require_job_update(
 
 
 async def run_generation_job(job_id: str) -> None:
+    # The questionnaire input is already durable before this function starts.
+    # Waiting outside the lease keeps excess jobs queued and prevents a burst of
+    # students from opening an unbounded number of model requests.
+    limiter = _get_generation_limiter()
+    if limiter.locked():
+        logger.info("generation job waiting for worker slot: job_id=%s", job_id)
+    async with limiter:
+        logger.info("generation job entered worker slot: job_id=%s", job_id)
+        await _run_generation_job(job_id)
+
+
+async def _run_generation_job(job_id: str) -> None:
     claim_token = str(uuid4())
     heartbeat: asyncio.Task[None] | None = None
     try:
@@ -226,6 +263,7 @@ async def run_generation_job(job_id: str) -> None:
                     job_id,
                     claim_token,
                     terminal=True,
+                    clear_input_data=True,
                     status="success",
                     stage="completed",
                     progress=100,
@@ -276,6 +314,11 @@ async def run_generation_job(job_id: str) -> None:
         try:
             profile = await analyze_career_profile(response, progress_callback=profile_progress)
         except ProfileAnalysisError as error:
+            logger.warning(
+                "generation job profile failed: job_id=%s error=%s",
+                job_id,
+                error,
+            )
             _update_running_job(
                 job_id,
                 claim_token,
@@ -317,6 +360,11 @@ async def run_generation_job(job_id: str) -> None:
         try:
             report = await generate_report(response, profile, progress_callback=report_progress)
         except ReportGenerationError as error:
+            logger.warning(
+                "generation job report failed: job_id=%s error=%s",
+                job_id,
+                error,
+            )
             _update_running_job(
                 job_id,
                 claim_token,
@@ -348,6 +396,7 @@ async def run_generation_job(job_id: str) -> None:
             job_id,
             claim_token,
             terminal=True,
+            clear_input_data=True,
             status="success",
             stage="completed",
             progress=100,
@@ -355,11 +404,13 @@ async def run_generation_job(job_id: str) -> None:
             reportId=report.id,
             generationStatus=report.generationStatus,
         )
+        logger.info("generation job completed: job_id=%s", job_id)
     except asyncio.CancelledError:
         # User cancellation already made a conditional terminal transition.
         # Process shutdown leaves the lease in place so another worker can recover it.
         raise
     except Exception as error:
+        logger.exception("generation job crashed: job_id=%s", job_id)
         _update_running_job(
             job_id,
             claim_token,

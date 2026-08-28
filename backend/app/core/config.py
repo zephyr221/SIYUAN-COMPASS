@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     ai_api_key: str | None = None
     ai_api_base: str | None = None
     ai_model: str | None = None
-    llm_timeout_seconds: float = 180
+    llm_timeout_seconds: float = 600
     speech_provider: str = "disabled"
     speech_xfyun_app_id: str | None = None
     speech_xfyun_api_key: str | None = None
@@ -44,8 +44,14 @@ class Settings(BaseSettings):
     portal_logout_url: str = "https://ai4edu.sjtu.edu.cn/auth/logout"
     public_app_url: str = "http://localhost:5173"
     app_base_path: str = "/"
+    assessment_submission_maintenance: bool = False
+    assessment_submission_maintenance_message: str = (
+        "报告生成服务正在维护，现暂停新提交和报告生成。请勿重复提交、清理浏览器缓存或更换设备，"
+        "以免丢失本机已填写内容。请保留当前浏览器；恢复后请先查看结果，我们会另行通知需要补充信息的同学。"
+    )
     report_generation_daily_limit: int = 0
     report_generation_quota_timezone: str = "Asia/Shanghai"
+    generation_max_concurrency: int = 4
     generation_job_lease_seconds: int = 300
     generation_job_heartbeat_seconds: int = 30
     generation_job_retention_days: int = 30

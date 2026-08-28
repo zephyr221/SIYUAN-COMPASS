@@ -1,7 +1,6 @@
-import logging
+from fastapi import APIRouter, Depends, HTTPException, Response
 
-from fastapi import APIRouter, Depends, HTTPException
-
+from app.core.config import get_settings
 from app.schemas.assessment import AssessmentResponseInput, AssessmentSubmitResult
 from app.schemas.assessment_draft import (
     AssessmentDraft,
@@ -29,7 +28,27 @@ from app.storage.json_db import (
 )
 
 router = APIRouter(tags=["assessments"])
-logger = logging.getLogger(__name__)
+
+
+def _maintenance_status() -> dict[str, object]:
+    settings = get_settings()
+    return {
+        "active": settings.assessment_submission_maintenance,
+        "message": settings.assessment_submission_maintenance_message,
+    }
+
+
+def _require_submission_available() -> None:
+    status = _maintenance_status()
+    if status["active"]:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": status["message"],
+                "maintenance": True,
+            },
+            headers={"Retry-After": "3600"},
+        )
 
 
 def _reserve_job(user_id: str, input_data: AssessmentResponseInput) -> GenerationJobStatus:
@@ -59,13 +78,10 @@ def _reserve_job(user_id: str, input_data: AssessmentResponseInput) -> Generatio
         ) from error
 
 
-def _clear_draft_after_job_created(user_id: str) -> None:
-    try:
-        delete_assessment_draft(user_id)
-    except Exception:
-        # A draft is a recovery aid; failure to remove it must not turn a
-        # successfully queued report into a failed submission.
-        logger.exception("failed to clear assessment draft after job creation")
+@router.get("/assessment-maintenance")
+def get_assessment_maintenance(response: Response) -> dict[str, object]:
+    response.headers["Cache-Control"] = "no-store"
+    return _maintenance_status()
 
 
 @router.get("/assessment-draft", response_model=AssessmentDraftEnvelope)
@@ -107,6 +123,7 @@ async def create_assessment_job(
     input_data: AssessmentResponseInput,
     user=Depends(require_user),
 ) -> GenerationJobCreated:
+    _require_submission_available()
     field_errors = validate_assessment_fields(input_data)
     if field_errors:
         raise HTTPException(
@@ -116,7 +133,6 @@ async def create_assessment_job(
 
     authenticated_input = input_data.model_copy(update={"userId": user["id"]})
     job = _reserve_job(user["id"], authenticated_input)
-    _clear_draft_after_job_created(user["id"])
     start_generation_job(job.jobId)
     return GenerationJobCreated(jobId=job.jobId, status="queued")
 
@@ -152,6 +168,7 @@ async def submit_assessment(
     input_data: AssessmentResponseInput,
     user=Depends(require_user),
 ) -> AssessmentSubmitResult:
+    _require_submission_available()
     field_errors = validate_assessment_fields(input_data)
     if field_errors:
         raise HTTPException(
@@ -161,7 +178,6 @@ async def submit_assessment(
 
     authenticated_input = input_data.model_copy(update={"userId": user["id"]})
     job = _reserve_job(user["id"], authenticated_input)
-    _clear_draft_after_job_created(user["id"])
     await run_generation_job(job.jobId)
     completed = get_generation_job(job.jobId)
     if not completed:
